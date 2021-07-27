@@ -2,6 +2,7 @@
 #include <elf.h>
 #include <malloc.h>
 #include <assert.h>
+#include <errno.h>
 #include "fileworking.h"
 
 char* ReadFile (const char* filename)
@@ -15,9 +16,11 @@ char* ReadFile (const char* filename)
         return NULL;
     }
 
-    size_t num_symbols = GetFileSize (file);
-    char* buf = calloc (num_symbols + 1, sizeof (*buf));
+    long num_bytes = GetFileSize (file);
+    if (num_bytes == -1)
+        return NULL;
 
+    char* buf = calloc (num_bytes + 1, sizeof (*buf));
 	if (!buf)
 	{
 		printf ("Error: Unable to allocate memory\n");
@@ -25,7 +28,7 @@ char* ReadFile (const char* filename)
 		return 0;
 	}
 
-	if (fread (buf, sizeof(*buf), num_symbols, file) != num_symbols)
+	if (fread (buf, sizeof(*buf), num_bytes, file) != (size_t) num_bytes)
     {
         printf ("Error: During reading something went wrong...\n");
 	    free (buf);
@@ -36,15 +39,21 @@ char* ReadFile (const char* filename)
     return buf;
 }
 
-size_t GetFileSize (FILE* file)
+long GetFileSize (FILE* file)
 {
     // ToDo: Work with files, that pointer != start
     assert (file);
 
     fseek (file, 0, SEEK_END);
-	size_t num_symbols = ftell (file); // ToDo: returns -1 error fix
-	fseek (file, 0, SEEK_SET);
+	long num_bytes = ftell (file); // ToDo: returns -1 error fix
+    if (num_bytes == -1L)
+    {
+        printf ("Error: ftell returns -1, error code: %d.\n", errno);
+        return -1;
+    }
 
-    return num_symbols;
+	fseek (file, 0, SEEK_SET);
+    // printf ("num_bytes = %lX.\n", num_bytes);
+    return num_bytes;
 }
 
