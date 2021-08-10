@@ -1,2 +1,13 @@
 .vscode
 *out
+Reflections
+
+# Created by protobuf
+Images/*.c
+Images/*.d
+Images/*.h
+Images/*.o
+Images/google/protobuf/*.c
+Images/google/protobuf/*.d
+Images/google/protobuf/*.h
+Images/google/protobuf/*.o

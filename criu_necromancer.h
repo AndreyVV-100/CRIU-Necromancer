@@ -58,6 +58,19 @@
 
 #endif
 
+typedef struct
+{
+    // Placed on argv
+    const char* elf;
+    const char* criu_dump_path;
+    const char* criu_dump_id;
+
+    // Created by calloc
+    char* pstree;
+    char* core;
+    char* mm;
+    char* pagemap;
+} ArgInfo;
 
 typedef struct
 {
@@ -67,6 +80,39 @@ typedef struct
     Elf_Half phnum;
 } Elf;
 
+typedef struct
+{
+    PstreeEntry* pstree;
+    CoreEntry* core;
+    MmEntry* mm;
+    PagemapEntry* pagemap;
+    // ToDo: FileEntry on fdinfo
+
+    // packed data
+    char* p_pstree;
+    char* p_core;
+    char* p_mm;
+    char* p_pagemap;
+
+    // int reserved;
+} Images;
+
+const ArgInfo EMPTY_ARGINFO = {};
+const Images  EMPTY_IMAGES  = {};
+
+#define MAX_PATH_LEN 1024
+
+int ParseArguments (int argc, char** argv, ArgInfo* args);
+
+int CreateImagesPath (ArgInfo* args);
+
+void ArgInfoFree (ArgInfo* args);
+
+Images* ImagesConstructor (ArgInfo* args);
+
+void ImagesWrite (Images* imgs, ArgInfo* args);
+
+void ImagesDestructor (Images* imgs);
 
 Elf* ElfConstructor (const char* filename);
 
@@ -75,3 +121,17 @@ void ElfDestructor (Elf* elf);
 Elf_Ehdr* CheckElfHdr (const char* buf);
 
 Elf_Phdr* CheckPhdrs (Elf* elf);
+
+void GoPhdrs (Elf* elf, Images* imgs);
+
+void GoNhdrs (void* nhdrs, Elf_Xword p_filesz);
+
+// ToDo: Mini documentation
+
+size_t GoPrpsinfo  (Elf_Nhdr* nhdr);
+size_t GoPrstatus  (Elf_Nhdr* nhdr);
+size_t GoFpregset  (Elf_Nhdr* nhdr);
+size_t GoX86_State (Elf_Nhdr* nhdr);
+size_t GoSiginfo   (Elf_Nhdr* nhdr);
+size_t GoAuxv      (Elf_Nhdr* nhdr);
+size_t GoFile      (Elf_Nhdr* nhdr);

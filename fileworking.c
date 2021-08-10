@@ -57,3 +57,20 @@ long GetFileSize (FILE* file)
     return num_bytes;
 }
 
+int WriteFile (const char* filename, const char* buf, size_t buf_size)
+{
+    assert (filename);
+    assert (buf);
+    assert (buf_size);
+
+    FILE* file = fopen (filename, "wb");
+    if (!file)
+    {
+        printf ("Error: Unable to open file %s : no such file or directory.\n", filename);
+        return 1;
+    }
+
+    fwrite (buf, sizeof (*buf), buf_size, file);
+    fclose (file);
+    return 0;
+}
