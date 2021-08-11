@@ -80,6 +80,48 @@ typedef struct
     Elf_Half phnum;
 } Elf;
 
+/*
+    As I understand, in v1.1 always 2 magics, except: inventory.
+    From https://criu.org/Images:
+    Or, you can visualize it like
+
+    Type 	    Size, bytes
+    Magic0 	    4
+    [Magic1]    [4]
+    Size0 	    4
+    Message0 	Size0
+    ... 	    ...
+    SizeN 	    4
+    MessageN    SizeN 
+
+    Such images can be one of
+
+    Array image files
+        In these files the amount of entries can be any. 
+        You should read the image file up to the EOF to find out the exact number.
+
+    Single-entry image files
+        In these files exactly one entry is stored.
+
+    name    type
+    pstree  array
+    core    single-entry
+    mm 	    single-entry
+
+    Pagemap files. {...} The file is a set of protobuf messages.
+
+    // ToDo: pstree and pagemap work with array?
+*/
+
+typedef struct
+{
+    uint32_t magic0; // in V1.1
+    uint32_t magic1;
+    uint32_t size0;
+    uint8_t  pb_msg; // using only as pointer: &(p_img->pb_msg). sizeof (pb_msg) == size0
+} PackedImage;
+
+
 typedef struct
 {
     PstreeEntry* pstree;
@@ -89,14 +131,15 @@ typedef struct
     // ToDo: FileEntry on fdinfo
 
     // packed data
-    char* p_pstree;
-    char* p_core;
-    char* p_mm;
-    char* p_pagemap;
+    PackedImage* p_pstree;
+    PackedImage* p_core;
+    PackedImage* p_mm;
+    PackedImage* p_pagemap;
 
     // int reserved;
 } Images;
 
+const size_t SIZEOF_P_IMAGE_HDR = sizeof (PackedImage) - sizeof (uint8_t); // not including pb_msg
 const ArgInfo EMPTY_ARGINFO = {};
 const Images  EMPTY_IMAGES  = {};
 
@@ -124,14 +167,14 @@ Elf_Phdr* CheckPhdrs (Elf* elf);
 
 void GoPhdrs (Elf* elf, Images* imgs);
 
-void GoNhdrs (void* nhdrs, Elf_Xword p_filesz);
+void GoNhdrs (void* nhdrs, Elf_Xword p_filesz, Images* imgs);
 
 // ToDo: Mini documentation
 
-size_t GoPrpsinfo  (Elf_Nhdr* nhdr);
-size_t GoPrstatus  (Elf_Nhdr* nhdr);
-size_t GoFpregset  (Elf_Nhdr* nhdr);
-size_t GoX86_State (Elf_Nhdr* nhdr);
-size_t GoSiginfo   (Elf_Nhdr* nhdr);
-size_t GoAuxv      (Elf_Nhdr* nhdr);
-size_t GoFile      (Elf_Nhdr* nhdr);
+size_t GoPrpsinfo  (Elf_Nhdr* nhdr, Images* imgs);
+size_t GoPrstatus  (Elf_Nhdr* nhdr, Images* imgs);
+size_t GoFpregset  (Elf_Nhdr* nhdr, Images* imgs);
+size_t GoX86_State (Elf_Nhdr* nhdr, Images* imgs);
+size_t GoSiginfo   (Elf_Nhdr* nhdr, Images* imgs);
+size_t GoAuxv      (Elf_Nhdr* nhdr, Images* imgs);
+size_t GoFile      (Elf_Nhdr* nhdr, Images* imgs);

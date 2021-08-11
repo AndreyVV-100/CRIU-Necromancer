@@ -12,7 +12,7 @@ char* ReadFile (const char* filename)
     FILE* file = fopen (filename, "rb");
     if (!file)
     {
-        printf ("Error: Unable to open file %s : no such file or directory.\n", filename);
+        fprintf (stderr, "Error: Unable to open file %s : no such file or directory.\n", filename);
         return NULL;
     }
 
@@ -23,14 +23,14 @@ char* ReadFile (const char* filename)
     char* buf = calloc (num_bytes + 1, sizeof (*buf));
 	if (!buf)
 	{
-		printf ("Error: Unable to allocate memory\n");
+		fprintf (stderr, "Error: Unable to allocate memory\n");
         fclose (file);
 		return 0;
 	}
 
 	if (fread (buf, sizeof(*buf), num_bytes, file) != (size_t) num_bytes)
     {
-        printf ("Error: During reading something went wrong...\n");
+        fprintf (stderr, "Error: During reading something went wrong...\n");
 	    free (buf);
         buf = NULL;
     }
@@ -48,12 +48,11 @@ long GetFileSize (FILE* file)
 	long num_bytes = ftell (file); // ToDo: returns -1 error fix
     if (num_bytes == -1L)
     {
-        printf ("Error: ftell returns -1, error code: %d.\n", errno);
+        fprintf (stderr, "Error: ftell returns -1, error code: %d.\n", errno);
         return -1;
     }
 
 	fseek (file, 0, SEEK_SET);
-    // printf ("num_bytes = %lX.\n", num_bytes);
     return num_bytes;
 }
 
@@ -66,7 +65,7 @@ int WriteFile (const char* filename, const char* buf, size_t buf_size)
     FILE* file = fopen (filename, "wb");
     if (!file)
     {
-        printf ("Error: Unable to open file %s : no such file or directory.\n", filename);
+        fprintf (stderr, "Error: Unable to open file %s : no such file or directory.\n", filename);
         return 1;
     }
 
