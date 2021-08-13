@@ -5,6 +5,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <sys/procfs.h>
+#include <signal.h>
 #include "Images/core.pb-c.h"
 #include "Images/pstree.pb-c.h"
 #include "Images/mm.pb-c.h"
@@ -424,52 +425,156 @@ void GoNhdrs (void* nhdrs, Elf_Xword p_filesz, Images* imgs)
     Name and desc have align = 4
 */
 
+// ToDo: Check name?
+// Note for offset: align of name = 4
+#define NHDR_START(type, name)  assert (nhdr);                                                                             \
+                                assert (imgs);                                                                             \
+                                assert (nhdr->n_type == type);                                                             \
+                                                                                                                           \
+                                if (nhdr->n_descsz != sizeof (name##_t))                                                   \
+                                    fprintf (stderr, "Error: Bad n_descsz in %s:\n"                                        \
+                                                     "Expected: sizeof (" #name ") = %lu\n"                                \
+                                                     "Detected: %u\n", __func__, sizeof (name##_t), nhdr->n_descsz);       \
+                                                                                                                           \
+                                size_t offset = sizeof (*nhdr) + (nhdr->n_namesz + 3) % 4;                                 \
+                                name##_t* name = (name##_t*) (((void*) nhdr) + offset)
+
+// align of desc = 4
+#define NHDR_RETURN return offset + (nhdr->n_descsz + 3) % 4
+
 size_t GoPrpsinfo  (Elf_Nhdr* nhdr, Images* imgs)
 {
-    assert (nhdr);
-    assert (nhdr->n_type == NT_PRPSINFO);
+    NHDR_START (NT_PRPSINFO, prpsinfo);
 
-    if (nhdr->n_descsz != sizeof (prpsinfo_t))
-        fprintf (stderr, "Error: Bad n_descsz in %s:\n"
-                         "Expected: sizeof (prpsinfo) = %lu\n"
-                         "Detected: %u\n", __func__, sizeof (prpsinfo_t), nhdr->n_descsz);
+    #define TASK_ALIVE 0x1
+    #define TASK_DEAD  0x2
+    #define TASK_STOPPED 0x3
 
-    // ToDo: Check name?
+    switch (prpsinfo->pr_state)
+    {
+        case 0:
+            imgs->core->tc->task_state = TASK_ALIVE;
+            break;
+        case 4:
+            imgs->core->tc->task_state = TASK_DEAD;
+            break;
+        case 3:
+            imgs->core->tc->task_state = TASK_STOPPED;
+            break;
+        // ToDo: default ?
+    }
 
-    size_t offset = sizeof (*nhdr) + (nhdr->n_namesz + 3) % 4; // align of name = 4
-    prpsinfo_t* prpsinfo = (prpsinfo_t*) (((void*) nhdr) + offset);
+    imgs->core->thread_core->sched_prio = prpsinfo->pr_nice; // ToDo: sched_prio not in thread_core?
+    imgs->core->tc->flags = prpsinfo->pr_flag;
+    imgs->core->thread_core->creds->uid = prpsinfo->pr_uid;
+    imgs->core->thread_core->creds->gid = prpsinfo->pr_gid;
+    imgs->pstree->pid  = prpsinfo->pr_pid;
+    imgs->pstree->ppid = prpsinfo->pr_ppid;
+    imgs->pstree->pgid = prpsinfo->pr_pgrp;
+    imgs->pstree->sid  = prpsinfo->pr_sid;
 
-    return offset + (nhdr->n_descsz + 3) % 4; // align of desc = 4
+    // ToDo: Psarg?
+
+    free (imgs->core->tc->comm);
+    imgs->core->tc->comm = strdup (prpsinfo->pr_fname);
+
+    #undef TASK_ALIVE
+    #undef TASK_DEAD
+    #undef TASK_STOPPED
+    NHDR_RETURN;
 }
 
 size_t GoPrstatus  (Elf_Nhdr* nhdr, Images* imgs)
 {
-    ERR_NOT_CREATED;
+    NHDR_START (NT_PRSTATUS, prstatus);
+
+    // ToDo: Other platforms?
+    UserX86RegsEntry* regs = imgs->core->thread_info->gpregs;
+
+    // pr_reg <==> user_regs_struct, but haven't this type
+    regs->r15 = prstatus->pr_reg[0];
+    regs->r14 = prstatus->pr_reg[1];
+    regs->r13 = prstatus->pr_reg[2];
+    regs->r12 = prstatus->pr_reg[3];
+    regs->bp  = prstatus->pr_reg[4];
+    regs->bx  = prstatus->pr_reg[5];
+    regs->r11 = prstatus->pr_reg[6];
+    regs->r10 = prstatus->pr_reg[7];
+    regs->r9  = prstatus->pr_reg[8];
+    regs->r8  = prstatus->pr_reg[9];
+    regs->ax  = prstatus->pr_reg[10];
+    regs->cx  = prstatus->pr_reg[11];
+    regs->dx  = prstatus->pr_reg[12];
+    regs->si  = prstatus->pr_reg[13];
+    regs->di  = prstatus->pr_reg[14];
+    regs->orig_ax = prstatus->pr_reg[15];
+    regs->ip  = prstatus->pr_reg[16];
+    regs->cs  = prstatus->pr_reg[17];
+    regs->flags = prstatus->pr_reg[18];
+    regs->sp  = prstatus->pr_reg[19];
+    regs->ss  = prstatus->pr_reg[20];
+    regs->fs_base = prstatus->pr_reg[21];
+    regs->gs_base = prstatus->pr_reg[22];
+    regs->ds  = prstatus->pr_reg[23];
+    regs->es  = prstatus->pr_reg[24];
+    regs->fs  = prstatus->pr_reg[25];
+    regs->gs  = prstatus->pr_reg[26];
+
+    NHDR_RETURN;    
 }
 
 size_t GoFpregset  (Elf_Nhdr* nhdr, Images* imgs)
 {
-    ERR_NOT_CREATED;
+    NHDR_START (NT_FPREGSET, elf_fpregset);
+
+    UserX86FpregsEntry* regs = imgs->core->thread_info->fpregs;
+    regs->cwd = elf_fpregset->cwd;
+    regs->swd = elf_fpregset->swd;
+    regs->twd = elf_fpregset->ftw;
+    regs->fop = elf_fpregset->fop;
+    regs->rip = elf_fpregset->rip;
+    regs->rdp = elf_fpregset->rdp;
+    regs->mxcsr = elf_fpregset->mxcsr;
+    regs->mxcsr_mask = elf_fpregset->mxcr_mask;
+    memcpy (regs->st_space,  elf_fpregset->st_space,  sizeof (elf_fpregset->st_space));
+    memcpy (regs->xmm_space, elf_fpregset->xmm_space, sizeof (elf_fpregset->xmm_space));
+    
+    NHDR_RETURN;
 }
 
 size_t GoX86_State (Elf_Nhdr* nhdr, Images* imgs)
 {
     ERR_NOT_CREATED;
+    // ToDo: Where elf_xsave?
 }
 
 size_t GoSiginfo   (Elf_Nhdr* nhdr, Images* imgs)
 {
-    ERR_NOT_CREATED;
+    NHDR_START (NT_SIGINFO, siginfo);
+    
+    // ToDo: ??? In coredump.py all sets to zero, not coping
+    free (imgs->core->tc->signals_s);
+    imgs->core->tc->signals_s = (SignalQueueEntry*) calloc (1, nhdr->n_descsz + 1);
+    memcpy (imgs->core->tc->signals_s, siginfo->si_code, nhdr->n_descsz);
+
+    NHDR_RETURN;
 }
 
 size_t GoAuxv      (Elf_Nhdr* nhdr, Images* imgs)
 {
-    ERR_NOT_CREATED;
+    NHDR_START (NT_AUXV, Elf_auxv);
+
+    free (imgs->mm->mm_saved_auxv);
+    imgs->mm->mm_saved_auxv = (uint64_t*) calloc (1, nhdr->n_descsz + 1);
+    memcpy (imgs->mm->mm_saved_auxv, Elf_auxv, nhdr->n_descsz); // ToDo: check n_descsz % 16 == 0?
+
+    NHDR_RETURN;
 }
 
 size_t GoFile       (Elf_Nhdr* nhdr, Images* imgs)
 {
     ERR_NOT_CREATED;
 }
-
+#undef NHDR_START
+#undef NHDR_RETURN
 #undef ERR_NOT_CREATED
