@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <sys/procfs.h>
 #include <signal.h>
+#include <compel/asm/fpu.h>
 #include "Images/core.pb-c.h"
 #include "Images/pstree.pb-c.h"
 #include "Images/mm.pb-c.h"
@@ -369,7 +370,7 @@ void GoNhdrs (void* nhdrs, Elf_Xword p_filesz, Images* imgs)
     {
         switch (((Elf_Nhdr*) nhdrs)->n_type)
         {
-            // ToDo: Create arrays and write after?
+            // ToDo: auto align and return err status
 
             case NT_PRPSINFO:
                 align = GoPrpsinfo ((Elf_Nhdr*) nhdrs, imgs);
@@ -461,7 +462,9 @@ size_t GoPrpsinfo  (Elf_Nhdr* nhdr, Images* imgs)
         case 3:
             imgs->core->tc->task_state = TASK_STOPPED;
             break;
-        // ToDo: default ?
+        default:
+            fprintf (stderr, "Warning: I don't know, what I must do with prpsinfo->pr_state = 0x%X\n",
+                             (uint32_t) (prpsinfo->pr_state));
     }
 
     imgs->core->thread_core->sched_prio = prpsinfo->pr_nice; // ToDo: sched_prio not in thread_core?
@@ -544,19 +547,41 @@ size_t GoFpregset  (Elf_Nhdr* nhdr, Images* imgs)
 
 size_t GoX86_State (Elf_Nhdr* nhdr, Images* imgs)
 {
-    ERR_NOT_CREATED;
-    // ToDo: Where elf_xsave?
+    typedef struct xsave_struct xsave_t;
+    NHDR_START (NT_X86_XSTATE, xsave);
+
+    UserX86FpregsEntry* regs = imgs->core->thread_info->fpregs;
+    regs->twd = xsave->i387.twd;
+    // ToDo: st_space, xmm_space as in previos function?
+
+    if (regs->xsave == NULL)
+    {
+        fprintf (stderr, "Warning: UserX86XsaveEntry doesn't exist yet. Creating it...\n");
+        regs->xsave = (UserX86XsaveEntry*) calloc (1, sizeof (*(regs->xsave)));
+    }
+
+    regs->xsave->xstate_bv = xsave->xsave_hdr.xstate_bv;
+    free (regs->xsave->ymmh_space);
+    regs->xsave->ymmh_space = (uint32_t*) calloc (1, sizeof (xsave->ymmh));
+    memcpy (regs->xsave->ymmh_space, &(xsave->ymmh), sizeof (xsave->ymmh));
+
+    NHDR_RETURN;
 }
 
 size_t GoSiginfo   (Elf_Nhdr* nhdr, Images* imgs)
 {
     NHDR_START (NT_SIGINFO, siginfo);
-    
-    // ToDo: ??? In coredump.py all sets to zero, not coping
-    free (imgs->core->tc->signals_s);
-    imgs->core->tc->signals_s = (SignalQueueEntry*) calloc (1, nhdr->n_descsz + 1);
-    memcpy (imgs->core->tc->signals_s, siginfo->si_code, nhdr->n_descsz);
+    static size_t new_pos = 0;
+    // ToDo: new_pos < n_signals after working program?
+    if (new_pos >= imgs->core->tc->signals_s->n_signals)
+    {
+        fprintf (stderr, "Error: amount of siginfo_t structs >= n_signals. Maybe fix it in this program?\n");
+        return 0;
+    }
 
+    memcpy (imgs->core->tc->signals_s->signals[new_pos]->siginfo.data, siginfo->si_code, nhdr->n_descsz);
+
+    new_pos++;
     NHDR_RETURN;
 }
 
@@ -571,9 +596,38 @@ size_t GoAuxv      (Elf_Nhdr* nhdr, Images* imgs)
     NHDR_RETURN;
 }
 
-size_t GoFile       (Elf_Nhdr* nhdr, Images* imgs)
+// ToDo: where get file_t?
+struct file_array
 {
-    ERR_NOT_CREATED;
+    long start, end, file_ofs;
+};
+
+typedef struct
+{
+    long count, pagesize;
+    struct file_array array[]; // As my tests show, it is correct.
+} file_t;
+
+
+size_t GoFile      (Elf_Nhdr* nhdr, Images* imgs)
+{
+    NHDR_START (NT_FILE, file);
+
+    if (imgs->mm->n_vmas != file->count)
+    {
+        fprintf (stderr, "Error (FIXME): n_vmas != count in NT_FILE.\n");
+        return 0;
+    }
+
+    // ToDo: names?
+    for (int i_vma = 0; i_vma < file->count; i_vma++)
+    {
+        imgs->mm->vmas[i_vma]->start = file->array[i_vma].start;
+        imgs->mm->vmas[i_vma]->end   = file->array[i_vma].end;
+        imgs->mm->vmas[i_vma]->pgoff = file->array[i_vma].file_ofs * PAGESIZE;
+    }
+
+    NHDR_RETURN;
 }
 #undef NHDR_START
 #undef NHDR_RETURN

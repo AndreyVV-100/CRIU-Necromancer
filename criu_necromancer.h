@@ -142,6 +142,7 @@ typedef struct
 const size_t SIZEOF_P_IMAGE_HDR = sizeof (PackedImage) - sizeof (uint8_t); // not including pb_msg
 const ArgInfo EMPTY_ARGINFO = {};
 const Images  EMPTY_IMAGES  = {};
+const size_t PAGESIZE = 4096;
 
 #define MAX_PATH_LEN 1024
 
