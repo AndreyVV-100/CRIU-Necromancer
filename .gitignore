@@ -1,6 +1,7 @@
 .vscode
 *out
 Reflections
+criu-necromancer
 
 # Created by protobuf
 Images/*.c
