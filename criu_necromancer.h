@@ -179,3 +179,38 @@ size_t GoX86_State (Elf_Nhdr* nhdr, Images* imgs);
 size_t GoSiginfo   (Elf_Nhdr* nhdr, Images* imgs);
 size_t GoAuxv      (Elf_Nhdr* nhdr, Images* imgs);
 size_t GoFile      (Elf_Nhdr* nhdr, Images* imgs);
+
+/*  
+    ToDo: threads, many processes.
+
+    Check list:
+
+    -core - core_entry in core.proto:
+            -mtype - supported only x86-64 (but isn't checked) - ?
+            -thread-info:
+                -gpregs - in GoPrstatus - OK
+                -fpregs - in GoFpregset - OK
+            -tc:
+                -Some in GoPrpsinfo - OK
+                -Some in GoSiginfo  - OK
+                -Some required fields isn't changing (exit_code, personality) - OK
+
+    -files - ?
+
+    -ids - only renaming, but no working with it.
+
+    -pstree - pstree_entry in pstree.proto:
+                -all in GoPrpsinfo - OK (but no threads)
+
+    -mm - mm_entry in mm.proto:
+            -mm_saved_auxv - working in GoAuxv
+            -vmas - ?
+            -other - ?
+
+    -pagemap - ?
+
+    -timens - responsible for time, skipping
+
+    -tty-info - no working with it in coredump.py, skipping (see https://github.com/checkpoint-restore/criu/blob/criu-dev/coredump/criu_coredump/coredump.py)
+
+*/

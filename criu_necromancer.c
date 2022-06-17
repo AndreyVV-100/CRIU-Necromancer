@@ -33,7 +33,7 @@ int main (int argc, char** argv)
     return 0;
 }
 
-int ParseArguments (int argc, char** argv, ArgInfo* args)
+int ParseArguments (int argc, char** argv, ArgInfo* args) // ToDo: getopt
 {
     assert (argc);
     assert (argv);
@@ -214,7 +214,8 @@ void ImagesWrite (Images* imgs, ArgInfo* args)
     char old_name[MAX_PATH_LEN] = "";
     char new_name[MAX_PATH_LEN] = "";
 
-    // In my images I found 2 files, that need to be renamed: fs and ids
+    // In my images I found 2 files, that need to be renamed: fs and ids.
+    // core, mm and pagemap are renamed in CreateImagesPath yet.
     // ToDo: find all files in documentation.
 
     // Sorry for copypaste, I don't want to write define for 2 files.
@@ -443,7 +444,7 @@ void GoNhdrs (void* nhdrs, Elf_Xword p_filesz, Images* imgs)
 // align of desc = 4
 #define NHDR_RETURN return offset + (nhdr->n_descsz + 3) % 4
 
-size_t GoPrpsinfo  (Elf_Nhdr* nhdr, Images* imgs)
+size_t GoPrpsinfo (Elf_Nhdr* nhdr, Images* imgs)
 {
     NHDR_START (NT_PRPSINFO, prpsinfo);
 
@@ -465,6 +466,7 @@ size_t GoPrpsinfo  (Elf_Nhdr* nhdr, Images* imgs)
         default:
             fprintf (stderr, "Warning: I don't know, what I must do with prpsinfo->pr_state = 0x%X\n",
                              (uint32_t) (prpsinfo->pr_state));
+            break;
     }
 
     imgs->core->thread_core->sched_prio = prpsinfo->pr_nice; // ToDo: sched_prio not in thread_core?
@@ -476,7 +478,7 @@ size_t GoPrpsinfo  (Elf_Nhdr* nhdr, Images* imgs)
     imgs->pstree->pgid = prpsinfo->pr_pgrp;
     imgs->pstree->sid  = prpsinfo->pr_sid;
 
-    // ToDo: Psarg?
+    // ToDo: Psarg - it's command line, working with memory and chunks.
 
     free (imgs->core->tc->comm);
     imgs->core->tc->comm = strdup (prpsinfo->pr_fname);
@@ -487,7 +489,7 @@ size_t GoPrpsinfo  (Elf_Nhdr* nhdr, Images* imgs)
     NHDR_RETURN;
 }
 
-size_t GoPrstatus  (Elf_Nhdr* nhdr, Images* imgs)
+size_t GoPrstatus (Elf_Nhdr* nhdr, Images* imgs)
 {
     NHDR_START (NT_PRSTATUS, prstatus);
 
@@ -526,7 +528,7 @@ size_t GoPrstatus  (Elf_Nhdr* nhdr, Images* imgs)
     NHDR_RETURN;    
 }
 
-size_t GoFpregset  (Elf_Nhdr* nhdr, Images* imgs)
+size_t GoFpregset (Elf_Nhdr* nhdr, Images* imgs)
 {
     NHDR_START (NT_FPREGSET, elf_fpregset);
 
@@ -568,7 +570,7 @@ size_t GoX86_State (Elf_Nhdr* nhdr, Images* imgs)
     NHDR_RETURN;
 }
 
-size_t GoSiginfo   (Elf_Nhdr* nhdr, Images* imgs)
+size_t GoSiginfo (Elf_Nhdr* nhdr, Images* imgs)
 {
     NHDR_START (NT_SIGINFO, siginfo);
     static size_t new_pos = 0;
@@ -579,13 +581,16 @@ size_t GoSiginfo   (Elf_Nhdr* nhdr, Images* imgs)
         return 0;
     }
 
-    memcpy (imgs->core->tc->signals_s->signals[new_pos]->siginfo.data, siginfo->si_code, nhdr->n_descsz);
+    // ToDo: Is it correct? Here was:
+    // memcpy (imgs->core->tc->signals_s->signals[new_pos]->siginfo.data, siginfo->si_code, nhdr->n_descsz);
+    // But it's incorrect. I don't know, what I meant when I wrote this one year ago.
+    memcpy (imgs->core->tc->signals_s->signals[new_pos]->siginfo.data, &(siginfo->si_code), nhdr->n_descsz);
 
     new_pos++;
     NHDR_RETURN;
 }
 
-size_t GoAuxv      (Elf_Nhdr* nhdr, Images* imgs)
+size_t GoAuxv (Elf_Nhdr* nhdr, Images* imgs)
 {
     NHDR_START (NT_AUXV, Elf_auxv);
 
@@ -608,27 +613,27 @@ typedef struct
     struct file_array array[]; // As my tests show, it is correct.
 } file_t;
 
-
-size_t GoFile      (Elf_Nhdr* nhdr, Images* imgs)
+size_t GoFile (Elf_Nhdr* nhdr, Images* imgs)
 {
     NHDR_START (NT_FILE, file);
 
-    if (imgs->mm->n_vmas != file->count)
+    if (imgs->mm->n_vmas != (size_t) file->count)
     {
         fprintf (stderr, "Error (FIXME): n_vmas != count in NT_FILE.\n");
         return 0;
     }
 
-    // ToDo: names?
+    // ToDo: names? See coredump.py:583
     for (int i_vma = 0; i_vma < file->count; i_vma++)
     {
         imgs->mm->vmas[i_vma]->start = file->array[i_vma].start;
         imgs->mm->vmas[i_vma]->end   = file->array[i_vma].end;
-        imgs->mm->vmas[i_vma]->pgoff = file->array[i_vma].file_ofs * PAGESIZE;
+        imgs->mm->vmas[i_vma]->pgoff = file->array[i_vma].file_ofs * PAGESIZE; // ToDo: why * PAGESIZE?
     }
 
     NHDR_RETURN;
 }
+
 #undef NHDR_START
 #undef NHDR_RETURN
 #undef ERR_NOT_CREATED

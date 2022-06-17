@@ -1,5 +1,5 @@
 CC := gcc
-CFLAGS := -Wall -Wextra -Wpedantic
+CFLAGS := -Wall -Wextra
 FILES  := criu_necromancer.c fileworking.c
 LDLIBS := -lprotobuf-c
 

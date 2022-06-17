@@ -2,6 +2,7 @@
 *out
 Reflections
 criu-necromancer
+TestFolder
 
 # Created by protobuf
 Images/*.c
