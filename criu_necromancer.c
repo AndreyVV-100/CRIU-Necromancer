@@ -39,7 +39,6 @@ int ParseArguments (int argc, char** argv, ArgInfo* args) // ToDo: getopt
     assert (args->pstree  == NULL);
     assert (args->core    == NULL);
     assert (args->mm      == NULL);
-    assert (args->pagemap == NULL);
     /*
         Need 3 types of arguments
         -c coredump path (elf file)
@@ -141,14 +140,10 @@ int CreateImagesPath (ArgInfo* args)
     args->pstree  = CreateOneImagePath        (args->criu_dump_path, "pstree");
     args->core    = CreateOneImagePathWithStrPid (args->criu_dump_path, "core",    args->criu_dump_id);
     args->mm      = CreateOneImagePathWithStrPid (args->criu_dump_path, "mm",      args->criu_dump_id);
-    args->pagemap = CreateOneImagePathWithStrPid (args->criu_dump_path, "pagemap", args->criu_dump_id);
-    args->files   = CreateOneImagePath        (args->criu_dump_path, "files");
 
     check_pointer (pstree)
     check_pointer (core)
     check_pointer (mm)
-    check_pointer (pagemap)
-    check_pointer (files)
     
     #undef check_pointer
     return 0;
@@ -160,8 +155,7 @@ void ArgInfoFree (ArgInfo* args)
     free (args->pstree);                        
     free (args->core);
     free (args->mm);
-    free (args->pagemap);
-    free (args->files);
+
     *args = EMPTY_ARGINFO;
     return;
 }
@@ -172,7 +166,6 @@ Images* ImagesConstructor (ArgInfo* args)
     assert (args->pstree);
     assert (args->core);
     assert (args->mm);
-    assert (args->pagemap);
 
     #define check_pointer(pointer)  if (pointer == NULL)                                   \
                                     {                                                      \
@@ -188,20 +181,14 @@ Images* ImagesConstructor (ArgInfo* args)
     imgs->p_pstree  = (PackedImage*) ReadFile (args->pstree);
     imgs->p_core    = (PackedImage*) ReadFile (args->core);
     imgs->p_mm      = (PackedImage*) ReadFile (args->mm);
-    imgs->p_pagemap = (PackedImage*) ReadFile (args->pagemap);
-    imgs->p_files   = (PackedImage*) ReadFile (args->files);
 
     check_pointer (imgs->p_pstree);    
     check_pointer (imgs->p_core);
     check_pointer (imgs->p_mm);
-    check_pointer (imgs->p_pagemap);
-    check_pointer (imgs->p_files);
 
     imgs->pstree  = pstree_entry__unpack  (NULL, imgs->p_pstree->size0,  &(imgs->p_pstree->pb_msg));
     imgs->core    = core_entry__unpack    (NULL, imgs->p_core->size0,    &(imgs->p_core->pb_msg));
     imgs->mm      = mm_entry__unpack      (NULL, imgs->p_mm->size0,      &(imgs->p_mm->pb_msg));
-    imgs->pagemap = pagemap_entry__unpack (NULL, imgs->p_pagemap->size0, &(imgs->p_pagemap->pb_msg));
-    imgs->files   = file_entry__unpack    (NULL, imgs->p_files->size0,   &(imgs->p_files->pb_msg));
 
     #undef check_pointer
     return imgs;
@@ -238,25 +225,19 @@ void ImagesWrite (Images* imgs, ArgInfo* args)
     assert (args->pstree);
     assert (args->core);
     assert (args->mm);
-    assert (args->pagemap);
     assert (imgs->pstree);
     assert (imgs->core);
     assert (imgs->mm);
-    assert (imgs->pagemap);
 
     pstree_entry__pack  (imgs->pstree,  &(imgs->p_pstree->pb_msg));
     core_entry__pack    (imgs->core,    &(imgs->p_core->pb_msg));
     mm_entry__pack      (imgs->mm,      &(imgs->p_mm->pb_msg));
-    pagemap_entry__pack (imgs->pagemap, &(imgs->p_pagemap->pb_msg));
-    file_entry__pack    (imgs->files,   &(imgs->p_files->pb_msg));
 
     // ToDo: write all structs from images array
 
     WritePackedImage (imgs->p_pstree,  args->criu_dump_path, "pstree",  0);
     WritePackedImage (imgs->p_core,    args->criu_dump_path, "core",    imgs->pstree->pid);
     WritePackedImage (imgs->p_mm,      args->criu_dump_path, "mm",      imgs->pstree->pid);
-    WritePackedImage (imgs->p_pagemap, args->criu_dump_path, "pagemap", imgs->pstree->pid);
-    WritePackedImage (imgs->p_files,   args->criu_dump_path, "files",   0);
 
     char *old_name = NULL, *new_name = NULL;
 
@@ -278,14 +259,10 @@ void ImagesDestructor (Images* imgs)
     pstree_entry__free_unpacked  (imgs->pstree,  NULL);
     core_entry__free_unpacked    (imgs->core,    NULL);
     mm_entry__free_unpacked      (imgs->mm,      NULL);
-    pagemap_entry__free_unpacked (imgs->pagemap, NULL);
-    file_entry__free_unpacked    (imgs->files,   NULL);
 
     free (imgs->p_pstree);
     free (imgs->p_core);
     free (imgs->p_mm);
-    free (imgs->p_pagemap);
-    free (imgs->p_files);
 
     *imgs = EMPTY_IMAGES;
     free (imgs);
@@ -384,6 +361,7 @@ Elf_Phdr* CheckPhdrs (Elf* elf)
 void GoPhdrs (Elf* elf, Images* imgs)
 {
     assert (elf);
+    size_t vma_counter = 0;
 
     for (size_t i_phdr = 0; i_phdr < elf->phnum; i_phdr++)
     {
@@ -393,7 +371,10 @@ void GoPhdrs (Elf* elf, Images* imgs)
                 GoNhdrs (elf->buf + elf->phdr_table[i_phdr].p_paddr, elf->phdr_table[i_phdr].p_filesz, imgs);
                 break;
 
-            // ToDo: case PT_LOAD:
+            case PT_LOAD:
+                GoLoadPhdr (elf->phdr_table + i_phdr, imgs, vma_counter);
+                vma_counter++;
+                break;
 
             case PT_NULL:
                 break; // ?
@@ -408,6 +389,7 @@ void GoPhdrs (Elf* elf, Images* imgs)
 void GoNhdrs (void* nhdrs, Elf_Xword p_filesz, Images* imgs)
 {
     assert (nhdrs);
+    assert (imgs);
     size_t align = 0, common_align = 0;
     
     while (common_align < p_filesz)
@@ -678,6 +660,44 @@ size_t GoFile (Elf_Nhdr* nhdr, Images* imgs)
     }
 
     NHDR_RETURN;
+}
+
+void GoLoadPhdr (Elf_Phdr* phdr, Images* imgs, size_t vma_counter)
+{
+    assert (phdr);
+    assert (imgs);
+
+    if (imgs->mm->n_vmas <= vma_counter)
+    {
+        fprintf (stderr, "Cannot write vma because counter out of n_vmas. Fixme!\n");
+        return;
+    }
+
+    VmaEntry* vma = imgs->mm->vmas + vma_counter;
+    vma->start = phdr->p_vaddr;
+    vma->end   = phdr->p_vaddr + phdr->p_memsz;
+    // vma->pgoff = phdr->p_offset;
+    vma->prot  = GetVmaProtByPhdr (phdr->p_flags);
+}
+
+uint32_t GetVmaProtByPhdr (Elf_Word phdr_flags)
+{
+    // Given from criu-coredump
+    #define PROT_READ  0x1
+    #define PROT_WRITE 0x2
+    #define PROT_EXEC  0x4
+    uint32_t flags = 0;
+
+    if (phdr_flags & PF_R)
+        flags |= PROT_READ;
+
+    if (phdr_flags & PF_W)
+        flags |= PROT_WRITE;
+
+    if (phdr_flags & PF_X)
+        flags |= PROT_EXEC;
+
+    return flags;
 }
 
 #undef NHDR_START

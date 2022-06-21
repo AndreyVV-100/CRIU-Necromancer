@@ -75,8 +75,6 @@ typedef struct
     char* pstree;
     char* core;
     char* mm;
-    char* pagemap;
-    char* files;
 } ArgInfo;
 
 typedef struct
@@ -120,6 +118,7 @@ typedef struct
     // ToDo: pstree and pagemap work with array?
 */
 
+// ToDo: check magics (see criu/include/magic.h (https://github.com/checkpoint-restore/criu/blob/criu-dev/criu/include/magic.h))
 typedef struct
 {
     uint32_t magic0; // in V1.1
@@ -134,15 +133,13 @@ typedef struct
     PstreeEntry* pstree;
     CoreEntry* core;
     MmEntry* mm;
-    PagemapEntry* pagemap; // pagemap[0] = pages_id; pages-id.img - raw data
-    FileEntry* files;
+    // PagemapEntry* pagemap; // pagemap[0] = pages_id; pages-id.img - raw data
+    // FileEntry* files;
 
     // packed data
     PackedImage* p_pstree;
     PackedImage* p_core;
     PackedImage* p_mm;
-    PackedImage* p_pagemap;
-    PackedImage* p_files;
 
     // int reserved;
 } Images; 
@@ -185,6 +182,11 @@ void GoPhdrs (Elf* elf, Images* imgs);
 void GoNhdrs (void* nhdrs, Elf_Xword p_filesz, Images* imgs);
 
 // ToDo: Mini documentation
+/*
+    ToDo: Maybe do this: many headers ->  one image
+          Instead of:    one  header  -> many images
+    ???
+*/
 
 size_t GoPrpsinfo  (Elf_Nhdr* nhdr, Images* imgs);
 size_t GoPrstatus  (Elf_Nhdr* nhdr, Images* imgs);
@@ -193,6 +195,9 @@ size_t GoX86_State (Elf_Nhdr* nhdr, Images* imgs);
 size_t GoSiginfo   (Elf_Nhdr* nhdr, Images* imgs);
 size_t GoAuxv      (Elf_Nhdr* nhdr, Images* imgs);
 size_t GoFile      (Elf_Nhdr* nhdr, Images* imgs);
+
+void GoLoadPhdr (Elf_Phdr* phdr, Images* imgs, size_t vma_counter);
+uint32_t GetVmaProtByPhdr (Elf_Word phdr_flags);
 
 /*  
     ToDo: threads, many processes.
@@ -209,7 +214,7 @@ size_t GoFile      (Elf_Nhdr* nhdr, Images* imgs);
                 -Some in GoSiginfo  - OK
                 -Some required fields isn't changing (exit_code, personality) - OK
 
-    -files - ?
+    -files - in zero approximation - skip. ToDo
 
     -ids - only renaming, but no working with it.
 
@@ -217,11 +222,15 @@ size_t GoFile      (Elf_Nhdr* nhdr, Images* imgs);
                 -all in GoPrpsinfo - OK (but no threads)
 
     -mm - mm_entry in mm.proto:
-            -mm_saved_auxv - working in GoAuxv
-            -vmas - ?
-            -other - ?
+            -mm_saved_auxv - working in GoAuxv - OK
+            -vmas - it's program headers:
+                -start, end, prot - OK
+                -pgoffset - dependency exists, but I don't know it.
+                -shmid, flags, status - cannot recovery. You should hope, that values will match.
+            -other - if (setarch -R) - skip, else count with vma. ToDo
 
-    -pagemap - ?
+    -pagemap - count adresses with vma? Or skip a.k.a. other in mm? ToDo
+               but adresses isn't equivalent vmas' it isn't trivial. Skip before good time.
 
     -timens - responsible for time, skipping
 
