@@ -1,3 +1,9 @@
+#include "Images/core.pb-c.h"
+#include "Images/pstree.pb-c.h"
+#include "Images/mm.pb-c.h"
+#include "Images/pagemap.pb-c.h"
+#include "Images/fdinfo.pb-c.h"
+
 #ifdef MODE32
 
     #define Elf_Half    Elf32_Half
@@ -70,6 +76,7 @@ typedef struct
     char* core;
     char* mm;
     char* pagemap;
+    char* files;
 } ArgInfo;
 
 typedef struct
@@ -127,19 +134,21 @@ typedef struct
     PstreeEntry* pstree;
     CoreEntry* core;
     MmEntry* mm;
-    PagemapEntry* pagemap;
-    // ToDo: FileEntry on fdinfo
+    PagemapEntry* pagemap; // pagemap[0] = pages_id; pages-id.img - raw data
+    FileEntry* files;
 
     // packed data
     PackedImage* p_pstree;
     PackedImage* p_core;
     PackedImage* p_mm;
     PackedImage* p_pagemap;
+    PackedImage* p_files;
 
     // int reserved;
-} Images;
+} Images; 
+// ToDo: I don't like this struct and working with it. It's look like big copypaste.
 
-const size_t SIZEOF_P_IMAGE_HDR = sizeof (PackedImage) - sizeof (uint8_t); // not including pb_msg
+const size_t SIZEOF_P_IMAGE_HDR = sizeof (uint32_t) * 3; // not including pb_msg
 const ArgInfo EMPTY_ARGINFO = {};
 const Images  EMPTY_IMAGES  = {};
 const size_t PAGESIZE = 4096;
@@ -148,22 +157,27 @@ const size_t PAGESIZE = 4096;
 
 int ParseArguments (int argc, char** argv, ArgInfo* args);
 
+// C-style overloading. Maybe write it the other way?
+char* CreateOneImagePath           (const char* path, const char* name);
+char* CreateOneImagePathWithStrPid (const char* path, const char* name, const char* pid);
+char* CreateOneImagePathWithIntPid (const char* path, const char* name, int pid);
 int CreateImagesPath (ArgInfo* args);
 
 void ArgInfoFree (ArgInfo* args);
 
 Images* ImagesConstructor (ArgInfo* args);
-
-void ImagesWrite (Images* imgs, ArgInfo* args);
-
 void ImagesDestructor (Images* imgs);
 
-Elf* ElfConstructor (const char* filename);
+// If pid not needeed, pid = 0
+int WritePackedImage (PackedImage* img, const char* path, const char* name, int pid);
+// In this program pid's are keeping with this strange types. Sorry for strange args.
+void ChangeImagePid (const char* path, const char* name, const char* old_pid, int new_pid);
+void ImagesWrite (Images* imgs, ArgInfo* args);
 
+Elf* ElfConstructor (const char* filename);
 void ElfDestructor (Elf* elf);
 
 Elf_Ehdr* CheckElfHdr (const char* buf);
-
 Elf_Phdr* CheckPhdrs (Elf* elf);
 
 void GoPhdrs (Elf* elf, Images* imgs);

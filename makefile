@@ -5,10 +5,45 @@ LDLIBS := -lprotobuf-c
 
 OBJ_DESCRIPTOR := Images/google/protobuf/descriptor.o
 
-OBJS := Images/opts.o Images/rlimit.o Images/timer.o Images/creds.o Images/sa.o  \
-Images/siginfo.o Images/vma.o Images/mm.o Images/pagemap.o Images/pstree.o \
-Images/core-aarch64.o Images/core-arm.o \
-Images/core-mips.o Images/core-ppc64.o Images/core-s390.o Images/core-x86.o Images/core.o
+OBJS := Images/opts.o
+OBJS := $(OBJS) Images/rlimit.o
+OBJS := $(OBJS) Images/timer.o
+OBJS := $(OBJS) Images/creds.o
+OBJS := $(OBJS) Images/sa.o
+OBJS := $(OBJS) Images/siginfo.o
+OBJS := $(OBJS) Images/vma.o
+OBJS := $(OBJS) Images/mm.o
+OBJS := $(OBJS) Images/pagemap.o
+OBJS := $(OBJS) Images/pstree.o
+OBJS := $(OBJS) Images/core-aarch64.o
+OBJS := $(OBJS) Images/core-arm.o
+OBJS := $(OBJS) Images/core-mips.o
+OBJS := $(OBJS) Images/core-ppc64.o
+OBJS := $(OBJS) Images/core-s390.o
+OBJS := $(OBJS) Images/core-x86.o
+OBJS := $(OBJS) Images/core.o
+OBJS := $(OBJS) Images/fown.o
+OBJS := $(OBJS) Images/regfile.o
+OBJS := $(OBJS) Images/sk-opts.o
+OBJS := $(OBJS) Images/sk-inet.o
+OBJS := $(OBJS) Images/ns.o
+OBJS := $(OBJS) Images/packet-sock.o
+OBJS := $(OBJS) Images/sk-netlink.o
+OBJS := $(OBJS) Images/eventfd.o
+OBJS := $(OBJS) Images/eventpoll.o
+OBJS := $(OBJS) Images/signalfd.o
+OBJS := $(OBJS) Images/tun.o
+OBJS := $(OBJS) Images/timerfd.o
+OBJS := $(OBJS) Images/fh.o
+OBJS := $(OBJS) Images/fsnotify.o
+OBJS := $(OBJS) Images/ext-file.o
+OBJS := $(OBJS) Images/sk-unix.o
+OBJS := $(OBJS) Images/fifo.o
+OBJS := $(OBJS) Images/pipe.o
+OBJS := $(OBJS) Images/tty.o
+OBJS := $(OBJS) Images/memfd.o
+OBJS := $(OBJS) Images/bpfmap-file.o
+OBJS := $(OBJS) Images/fdinfo.o 
 
 .PHONY: all mode64 mode32 clean
 
@@ -33,7 +68,8 @@ clean:
 	rm -f Images/*.o
 	rm -f Images/google/protobuf/descriptor.pb-c.c
 	rm -f Images/google/protobuf/descriptor.pb-c.h
-	rm -f Images/google/protobuf/descriptor.o	
+	rm -f Images/google/protobuf/descriptor.o
+	rm -f criu-necromancer
 
 # ToDo: mode32: criu_necromancer fileworking.c
 #	gcc criu_necromancer fileworking.c -D MODE32 -Wall -Wextra

@@ -7,10 +7,6 @@
 #include <sys/procfs.h>
 #include <signal.h>
 #include <compel/asm/fpu.h>
-#include "Images/core.pb-c.h"
-#include "Images/pstree.pb-c.h"
-#include "Images/mm.pb-c.h"
-#include "Images/pagemap.pb-c.h"
 // #include <sys/user.h> included in procfs.h
 #include "criu_necromancer.h"
 #include "fileworking.h"
@@ -104,6 +100,29 @@ int ParseArguments (int argc, char** argv, ArgInfo* args) // ToDo: getopt
     return CreateImagesPath (args);
 }
 
+// C-style overloading
+
+char* CreateOneImagePath  (const char* path, const char* name)
+{
+    char buffer[MAX_PATH_LEN] = "";
+    sprintf (buffer, "%s/%s.img", path, name);
+    return strdup (buffer);
+}
+
+char* CreateOneImagePathWithStrPid (const char* path, const char* name, const char* pid)
+{
+    char buffer[MAX_PATH_LEN] = "";
+    sprintf (buffer, "%s/%s-%s.img", path, name, pid);
+    return strdup (buffer);
+}
+
+char* CreateOneImagePathWithIntPid (const char* path, const char* name, int pid)
+{
+    char buffer[MAX_PATH_LEN] = "";
+    sprintf (buffer, "%s/%s-%d.img", path, name, pid);
+    return strdup (buffer);
+}
+
 int CreateImagesPath (ArgInfo* args)
 {
     assert (args);
@@ -117,24 +136,20 @@ int CreateImagesPath (ArgInfo* args)
                                         return 1;                                            \
                                     }
 
-    // ToDo: check / on path?
+    // ToDo: check / on path? Why I wrote it?
 
-    #define create_path_img(field)  sprintf (buffer, "%s/%s-%s.img", args->criu_dump_path, #field, args->criu_dump_id); \
-                                    args->field = strdup (buffer); \
-                                    check_pointer (field)
+    args->pstree  = CreateOneImagePath        (args->criu_dump_path, "pstree");
+    args->core    = CreateOneImagePathWithStrPid (args->criu_dump_path, "core",    args->criu_dump_id);
+    args->mm      = CreateOneImagePathWithStrPid (args->criu_dump_path, "mm",      args->criu_dump_id);
+    args->pagemap = CreateOneImagePathWithStrPid (args->criu_dump_path, "pagemap", args->criu_dump_id);
+    args->files   = CreateOneImagePath        (args->criu_dump_path, "files");
 
-    char buffer[MAX_PATH_LEN] = "";
+    check_pointer (pstree)
+    check_pointer (core)
+    check_pointer (mm)
+    check_pointer (pagemap)
+    check_pointer (files)
     
-    // ToDo: Other formats of names of images? 
-    sprintf (buffer, "%s/pstree.img", args->criu_dump_path);
-    args->pstree = strdup (buffer);
-    check_pointer(pstree);
-
-    create_path_img (core);
-    create_path_img (mm);
-    create_path_img (pagemap);
-
-    #undef create_path_img
     #undef check_pointer
     return 0;
 }
@@ -146,6 +161,7 @@ void ArgInfoFree (ArgInfo* args)
     free (args->core);
     free (args->mm);
     free (args->pagemap);
+    free (args->files);
     *args = EMPTY_ARGINFO;
     return;
 }
@@ -173,19 +189,47 @@ Images* ImagesConstructor (ArgInfo* args)
     imgs->p_core    = (PackedImage*) ReadFile (args->core);
     imgs->p_mm      = (PackedImage*) ReadFile (args->mm);
     imgs->p_pagemap = (PackedImage*) ReadFile (args->pagemap);
+    imgs->p_files   = (PackedImage*) ReadFile (args->files);
 
     check_pointer (imgs->p_pstree);    
     check_pointer (imgs->p_core);
     check_pointer (imgs->p_mm);
     check_pointer (imgs->p_pagemap);
+    check_pointer (imgs->p_files);
 
     imgs->pstree  = pstree_entry__unpack  (NULL, imgs->p_pstree->size0,  &(imgs->p_pstree->pb_msg));
     imgs->core    = core_entry__unpack    (NULL, imgs->p_core->size0,    &(imgs->p_core->pb_msg));
     imgs->mm      = mm_entry__unpack      (NULL, imgs->p_mm->size0,      &(imgs->p_mm->pb_msg));
     imgs->pagemap = pagemap_entry__unpack (NULL, imgs->p_pagemap->size0, &(imgs->p_pagemap->pb_msg));
+    imgs->files   = file_entry__unpack    (NULL, imgs->p_files->size0,   &(imgs->p_files->pb_msg));
 
     #undef check_pointer
     return imgs;
+}
+
+int WritePackedImage (PackedImage* img, const char* path, const char* name, int pid) // If pid not needeed, pid = 0
+{
+    char* filename = NULL;
+    
+    if (pid == 0)
+        filename = CreateOneImagePath (path, name);
+    else
+        filename = CreateOneImagePathWithIntPid (path, name, pid);
+
+    int res = WriteFile (filename, (const char*) img, img->size0 + SIZEOF_P_IMAGE_HDR);
+    free (filename);
+    return res;
+}
+
+// In this program pid's are keeping with this strange types. Sorry for strange args.
+void ChangeImagePid (const char* path, const char* name, const char* old_pid, int new_pid)
+{
+    const char* old_name = CreateOneImagePathWithStrPid (path, name, old_pid);
+    const char* new_name = CreateOneImagePathWithIntPid (path, name, new_pid);
+    rename (old_name, new_name);
+    free (old_name);
+    free (new_name);
+    return;
 }
 
 void ImagesWrite (Images* imgs, ArgInfo* args)
@@ -204,29 +248,24 @@ void ImagesWrite (Images* imgs, ArgInfo* args)
     core_entry__pack    (imgs->core,    &(imgs->p_core->pb_msg));
     mm_entry__pack      (imgs->mm,      &(imgs->p_mm->pb_msg));
     pagemap_entry__pack (imgs->pagemap, &(imgs->p_pagemap->pb_msg));
+    file_entry__pack    (imgs->files,   &(imgs->p_files->pb_msg));
 
-    // ToDo: write only first struct in array images?
-    WriteFile (args->pstree,  (const char*) imgs->p_pstree,  imgs->p_pstree->size0 + SIZEOF_P_IMAGE_HDR);
-    WriteFile (args->core,    (const char*) imgs->p_core,    imgs->p_core->size0 + SIZEOF_P_IMAGE_HDR);
-    WriteFile (args->mm,      (const char*) imgs->p_mm,      imgs->p_mm->size0 + SIZEOF_P_IMAGE_HDR);
-    WriteFile (args->pagemap, (const char*) imgs->p_pagemap, imgs->p_pagemap->size0 + SIZEOF_P_IMAGE_HDR);
+    // ToDo: write all structs from images array
 
-    char old_name[MAX_PATH_LEN] = "";
-    char new_name[MAX_PATH_LEN] = "";
+    WritePackedImage (imgs->p_pstree,  args->criu_dump_path, "pstree",  0);
+    WritePackedImage (imgs->p_core,    args->criu_dump_path, "core",    imgs->pstree->pid);
+    WritePackedImage (imgs->p_mm,      args->criu_dump_path, "mm",      imgs->pstree->pid);
+    WritePackedImage (imgs->p_pagemap, args->criu_dump_path, "pagemap", imgs->pstree->pid);
+    WritePackedImage (imgs->p_files,   args->criu_dump_path, "files",   0);
+
+    char *old_name = NULL, *new_name = NULL;
 
     // In my images I found 2 files, that need to be renamed: fs and ids.
-    // core, mm and pagemap are renamed in CreateImagesPath yet.
+    // core, mm and pagemap are renamed yet.
     // ToDo: find all files in documentation.
 
-    // Sorry for copypaste, I don't want to write define for 2 files.
-
-    sprintf (old_name, "%s/fs-%s.img", args->criu_dump_path, args->criu_dump_id);
-    sprintf (new_name, "%s/fs-%d.img", args->criu_dump_path, imgs->pstree->pid);
-    rename (old_name, new_name);
-
-    sprintf (old_name, "%s/ids-%s.img", args->criu_dump_path, args->criu_dump_id);
-    sprintf (new_name, "%s/ids-%d.img", args->criu_dump_path, imgs->pstree->pid);
-    rename (old_name, new_name);
+    ChangeImagePid (args->criu_dump_path, "fs",  args->criu_dump_id, imgs->pstree->pid);
+    ChangeImagePid (args->criu_dump_path, "ids", args->criu_dump_id, imgs->pstree->pid);
 
     return;
 }
@@ -236,15 +275,17 @@ void ImagesDestructor (Images* imgs)
     if (!imgs)
         return;
 
-    pstree_entry__free_unpacked  (imgs->pstree, NULL);
-    core_entry__free_unpacked    (imgs->core, NULL);
-    mm_entry__free_unpacked      (imgs->mm, NULL);
+    pstree_entry__free_unpacked  (imgs->pstree,  NULL);
+    core_entry__free_unpacked    (imgs->core,    NULL);
+    mm_entry__free_unpacked      (imgs->mm,      NULL);
     pagemap_entry__free_unpacked (imgs->pagemap, NULL);
+    file_entry__free_unpacked    (imgs->files,   NULL);
 
     free (imgs->p_pstree);
     free (imgs->p_core);
     free (imgs->p_mm);
     free (imgs->p_pagemap);
+    free (imgs->p_files);
 
     *imgs = EMPTY_IMAGES;
     free (imgs);
@@ -352,6 +393,8 @@ void GoPhdrs (Elf* elf, Images* imgs)
                 GoNhdrs (elf->buf + elf->phdr_table[i_phdr].p_paddr, elf->phdr_table[i_phdr].p_filesz, imgs);
                 break;
 
+            // ToDo: case PT_LOAD:
+
             case PT_NULL:
                 break; // ?
 
@@ -365,9 +408,9 @@ void GoPhdrs (Elf* elf, Images* imgs)
 void GoNhdrs (void* nhdrs, Elf_Xword p_filesz, Images* imgs)
 {
     assert (nhdrs);
-    size_t align = 0;
+    size_t align = 0, common_align = 0;
     
-    while (align < p_filesz)
+    while (common_align < p_filesz)
     {
         switch (((Elf_Nhdr*) nhdrs)->n_type)
         {
@@ -411,6 +454,7 @@ void GoNhdrs (void* nhdrs, Elf_Xword p_filesz, Images* imgs)
         if (!align)
             return;
         nhdrs += align;
+        common_align += align;
     }
     
     return;
@@ -479,6 +523,7 @@ size_t GoPrpsinfo (Elf_Nhdr* nhdr, Images* imgs)
     imgs->pstree->sid  = prpsinfo->pr_sid;
 
     // ToDo: Psarg - it's command line, working with memory and chunks.
+    // prpsinfo->pr_psargs;
 
     free (imgs->core->tc->comm);
     imgs->core->tc->comm = strdup (prpsinfo->pr_fname);
@@ -624,11 +669,12 @@ size_t GoFile (Elf_Nhdr* nhdr, Images* imgs)
     }
 
     // ToDo: names? See coredump.py:583
+    // ToDo: Maybe do this more carefully?
     for (int i_vma = 0; i_vma < file->count; i_vma++)
     {
         imgs->mm->vmas[i_vma]->start = file->array[i_vma].start;
         imgs->mm->vmas[i_vma]->end   = file->array[i_vma].end;
-        imgs->mm->vmas[i_vma]->pgoff = file->array[i_vma].file_ofs * PAGESIZE; // ToDo: why * PAGESIZE?
+        imgs->mm->vmas[i_vma]->pgoff = file->array[i_vma].file_ofs * PAGESIZE;
     }
 
     NHDR_RETURN;
