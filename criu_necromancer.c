@@ -167,52 +167,35 @@ Images* ImagesConstructor (ArgInfo* args)
     assert (args->core);
     assert (args->mm);
 
-    #define check_pointer(pointer)  if (pointer == NULL)                                   \
+    Images* imgs = (Images*) calloc (1, sizeof (*imgs)); 
+    if (imgs == NULL)                                   
+    {                                                     
+        perror ("Can't create images");
+        ArgInfoFree (args);                        
+        return NULL;                                      
+    }
+
+    #define check_retval(retval) if ((retval) == -1)                                         \
                                     {                                                      \
                                         fprintf (stderr, "Error: Can't create images.\n"); \
                                         ArgInfoFree (args);                                \
                                         ImagesDestructor (imgs);                           \
                                         return NULL;                                       \
-                                    }
+                                    } 
 
-    Images* imgs = (Images*) calloc (1, sizeof (*imgs));
-    check_pointer (imgs);
+    check_retval (ReadOnlyOneMessage (args->pstree, (MessageUnpacker*) pstree_entry__unpack, (ProtobufCMessage**) &(imgs->pstree), MY_PSTREE_MAGIC));
+    check_retval (ReadOnlyOneMessage (args->core,   (MessageUnpacker*) core_entry__unpack,   (ProtobufCMessage**) &(imgs->core),   MY_CORE_MAGIC));
+    check_retval (ReadOnlyOneMessage (args->mm,     (MessageUnpacker*) mm_entry__unpack,     (ProtobufCMessage**) &(imgs->mm),     MY_MM_MAGIC));
 
-    imgs->p_pstree  = (PackedImage*) ReadFile (args->pstree);
-    imgs->p_core    = (PackedImage*) ReadFile (args->core);
-    imgs->p_mm      = (PackedImage*) ReadFile (args->mm);
-
-    check_pointer (imgs->p_pstree);    
-    check_pointer (imgs->p_core);
-    check_pointer (imgs->p_mm);
-
-    imgs->pstree  = pstree_entry__unpack  (NULL, imgs->p_pstree->size0,  &(imgs->p_pstree->pb_msg));
-    imgs->core    = core_entry__unpack    (NULL, imgs->p_core->size0,    &(imgs->p_core->pb_msg));
-    imgs->mm      = mm_entry__unpack      (NULL, imgs->p_mm->size0,      &(imgs->p_mm->pb_msg));
-
-    #undef check_pointer
+    #undef check_retval
     return imgs;
-}
-
-int WritePackedImage (PackedImage* img, const char* path, const char* name, int pid) // If pid not needeed, pid = 0
-{
-    char* filename = NULL;
-    
-    if (pid == 0)
-        filename = CreateOneImagePath (path, name);
-    else
-        filename = CreateOneImagePathWithIntPid (path, name, pid);
-
-    int res = WriteFile (filename, (const char*) img, img->size0 + SIZEOF_P_IMAGE_HDR);
-    free (filename);
-    return res;
 }
 
 // In this program pid's are keeping with this strange types. Sorry for strange args.
 void ChangeImagePid (const char* path, const char* name, const char* old_pid, int new_pid)
 {
-    const char* old_name = CreateOneImagePathWithStrPid (path, name, old_pid);
-    const char* new_name = CreateOneImagePathWithIntPid (path, name, new_pid);
+    char* old_name = CreateOneImagePathWithStrPid (path, name, old_pid);
+    char* new_name = CreateOneImagePathWithIntPid (path, name, new_pid);
     rename (old_name, new_name);
     free (old_name);
     free (new_name);
@@ -229,17 +212,14 @@ void ImagesWrite (Images* imgs, ArgInfo* args)
     assert (imgs->core);
     assert (imgs->mm);
 
-    pstree_entry__pack  (imgs->pstree,  &(imgs->p_pstree->pb_msg));
-    core_entry__pack    (imgs->core,    &(imgs->p_core->pb_msg));
-    mm_entry__pack      (imgs->mm,      &(imgs->p_mm->pb_msg));
+    WriteOnlyOneMessage (CreateOneImagePath (args->criu_dump_path, "pstree"), (MessagePacker*) pstree_entry__pack, 
+                         imgs->pstree, pstree_entry__get_packed_size (imgs->pstree), MY_PSTREE_MAGIC);
+    
+    WriteOnlyOneMessage (CreateOneImagePathWithIntPid (args->criu_dump_path, "core", imgs->pstree->pid), (MessagePacker*) core_entry__pack, 
+                         imgs->core,   core_entry__get_packed_size (imgs->core), MY_CORE_MAGIC);
 
-    // ToDo: write all structs from images array
-
-    WritePackedImage (imgs->p_pstree,  args->criu_dump_path, "pstree",  0);
-    WritePackedImage (imgs->p_core,    args->criu_dump_path, "core",    imgs->pstree->pid);
-    WritePackedImage (imgs->p_mm,      args->criu_dump_path, "mm",      imgs->pstree->pid);
-
-    char *old_name = NULL, *new_name = NULL;
+    WriteOnlyOneMessage (CreateOneImagePathWithIntPid (args->criu_dump_path, "mm",   imgs->pstree->pid), (MessagePacker*) mm_entry__pack, 
+                         imgs->mm,     mm_entry__get_packed_size (imgs->mm),     MY_MM_MAGIC);
 
     // In my images I found 2 files, that need to be renamed: fs and ids.
     // core, mm and pagemap are renamed yet.
@@ -372,7 +352,7 @@ void GoPhdrs (Elf* elf, Images* imgs)
                 break;
 
             case PT_LOAD:
-                GoLoadPhdr (elf->phdr_table + i_phdr, imgs, vma_counter);
+                // GoLoadPhdr (elf->phdr_table + i_phdr, imgs, vma_counter);
                 vma_counter++;
                 break;
 
@@ -441,10 +421,6 @@ void GoNhdrs (void* nhdrs, Elf_Xword p_filesz, Images* imgs)
     
     return;
 }
-
-#define ERR_NOT_CREATED assert (nhdr); \
-                        fprintf (stderr, "Error: Function %s isn't created yet.\n", __func__); \
-                        return 0
 
 /*
     For note functions:
@@ -640,7 +616,7 @@ typedef struct
     struct file_array array[]; // As my tests show, it is correct.
 } file_t;
 
-size_t GoFile (Elf_Nhdr* nhdr, Images* imgs)
+size_t GoFile (Elf_Nhdr* nhdr, Images* imgs) // ToDo: not working function
 {
     NHDR_START (NT_FILE, file);
 
@@ -662,7 +638,11 @@ size_t GoFile (Elf_Nhdr* nhdr, Images* imgs)
     NHDR_RETURN;
 }
 
-void GoLoadPhdr (Elf_Phdr* phdr, Images* imgs, size_t vma_counter)
+#undef NHDR_START
+#undef NHDR_RETURN
+
+// ToDo: problem: n_vmas != phnum - 1 ====> coping in cycle as now is incorrect.
+void GoLoadPhdr (Elf_Phdr* phdr, Images* imgs, size_t vma_counter) 
 {
     assert (phdr);
     assert (imgs);
@@ -673,7 +653,8 @@ void GoLoadPhdr (Elf_Phdr* phdr, Images* imgs, size_t vma_counter)
         return;
     }
 
-    VmaEntry* vma = imgs->mm->vmas + vma_counter;
+    VmaEntry* vma = imgs->mm->vmas[vma_counter];
+    printf ("%lX - %lX = %ld\n", vma->start, phdr->p_vaddr, vma->start - phdr->p_vaddr);
     vma->start = phdr->p_vaddr;
     vma->end   = phdr->p_vaddr + phdr->p_memsz;
     // vma->pgoff = phdr->p_offset;
@@ -700,6 +681,140 @@ uint32_t GetVmaProtByPhdr (Elf_Word phdr_flags)
     return flags;
 }
 
-#undef NHDR_START
-#undef NHDR_RETURN
-#undef ERR_NOT_CREATED
+FILE* StartImageReading (const char* filename, CriuMagic expected_magic)
+{
+    assert (filename);
+
+    FILE* file = fopen (filename, "r");
+    if (!file)
+    {
+        fprintf (stderr, "Can't open file %s\n", filename);
+        return NULL;
+    }
+
+    CriuMagic magic = {};
+    size_t err = fread (&magic, sizeof (magic), 1, file);
+    if (err != sizeof (magic) || CompareMagic (magic, expected_magic))
+    {
+        fprintf (stderr, "Bad magic in file %s.\n", filename);
+        return NULL;
+    }
+
+    return file;
+}
+
+// type of unpacker's return value == type of *unpacked_image
+// allocator for unpacker = default
+int ReadMessage (MessageUnpacker unpacker, ProtobufCMessage** unpacked_image, FILE* file) 
+{
+    assert (unpacker);
+    assert (unpacked_image);
+
+    uint32_t size = 0;
+    size_t err = fread (&size, sizeof (size),  1, file);
+    if (err != sizeof (size))
+    {
+        perror ("Can't read image size. Maybe bad file?");
+        return -1;
+    }
+
+    uint8_t* packed_data = (uint8_t*) calloc (1, size);
+    if (!packed_data)
+    {   
+        perror ("Can't allocate memory");
+        return -1;
+    }
+
+    err = fread (packed_data, size, 1, file);
+    if (err != size)
+    {
+        fprintf (stderr, "Can't read %u bytes as packed image. Maybe bad file?\n", size);
+        free (packed_data);
+        return -1;
+    }
+
+    *unpacked_image = unpacker (NULL, (size_t) size, packed_data);
+    return *unpacked_image ? 0 : -1;
+}
+
+int ReadOnlyOneMessage (const char* filename, MessageUnpacker unpacker, ProtobufCMessage** unpacked_image, CriuMagic expected_magic)
+{
+    assert (filename);
+    assert (unpacker);
+    assert (unpacked_image);
+
+    FILE* file = StartImageReading (filename, expected_magic);
+    int res = 0;
+
+    if (!file)
+        return -1;
+    else
+        res = ReadMessage (unpacker, unpacked_image, file);
+
+    fclose (file);
+    return res;
+}
+
+FILE* StartImageWriting (const char* filename, CriuMagic magic)
+{
+    assert (filename);
+
+    FILE* file = fopen (filename, "r");
+    if (!file)
+    {
+        fprintf (stderr, "Can't open file %s\n", filename);
+        return NULL;
+    }
+
+    size_t err = fwrite (&magic, sizeof (magic), 1, file);
+    if (err != sizeof (magic))
+    {
+        perror ("Write error");
+        fclose (file);
+        return NULL;
+    }
+
+    return file;
+}
+
+int WriteMessage (MessagePacker packer, const ProtobufCMessage* unpacked_image, size_t packed_image_size, FILE* file)
+{
+    assert (packer);
+    assert (unpacked_image);
+    assert (file);
+
+    uint8_t* packed_image = (uint8_t*) calloc (1, packed_image_size);
+    if (!packed_image)
+    {
+        perror ("Can't allocate memory");
+        return -1;
+    }
+
+    packer (unpacked_image, packed_image);
+    size_t err = fwrite (&packed_image_size, sizeof (uint32_t), 1, file); // very bad place, but it's only criu images standart
+    err += fwrite (&packed_image, packed_image_size, 1, file);
+
+    if (err != packed_image_size + sizeof (uint32_t))
+        perror ("Write error");
+
+    free (packed_image);
+    return err == packed_image_size + sizeof (uint32_t) ? 0 : -1;
+}
+
+int WriteOnlyOneMessage (const char* filename, MessagePacker packer, const void* unpacked_image, size_t packed_image_size, CriuMagic magic)
+{
+    assert (filename);
+    assert (packer);
+    assert (unpacked_image);
+
+    FILE* file = StartImageWriting (filename, magic);
+    int res = 0;
+
+    if (!file)
+        return -1;
+    else
+        res = WriteMessage (packer, unpacked_image, packed_image_size, file);
+
+    fclose (file);
+    return res;
+}

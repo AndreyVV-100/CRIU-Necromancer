@@ -125,7 +125,7 @@ typedef struct
     uint32_t magic1;
     uint32_t size0;
     uint8_t  pb_msg; // using only as pointer: &(p_img->pb_msg). sizeof (pb_msg) == size0
-} PackedImage;
+} PackedImage; // ToDo: useless?
 
 
 typedef struct
@@ -144,6 +144,23 @@ typedef struct
     // int reserved;
 } Images; 
 // ToDo: I don't like this struct and working with it. It's look like big copypaste.
+
+typedef ProtobufCMessage*  MessageUnpacker (ProtobufCAllocator*, size_t, const uint8_t*); // ToDo: maybe void -> ProtobufCMessage?
+typedef size_t MessagePacker (const void*, uint8_t*);
+typedef struct
+{
+    uint32_t magic0, magic1;
+} CriuMagic;
+
+// MY_ will useful after, when include criu/criu/include/magic.h
+// All numbers are given from this header
+static const CriuMagic MY_PSTREE_MAGIC  = {0x54564319, 0x50273030};
+static const CriuMagic MY_CORE_MAGIC    = {0x54564319, 0x55053847};
+static const CriuMagic MY_MM_MAGIC      = {0x54564319, 0x57492820};
+static const CriuMagic MY_PAGEMAP_MAGIC = {0x54564319, 0x56084025};
+static const CriuMagic MY_FILES_MAGIC   = {0x54564319, 0x56213732};
+
+static inline int CompareMagic (CriuMagic a, CriuMagic b) {return a.magic0 == b.magic0 && a.magic1 == b.magic1;}
 
 const size_t SIZEOF_P_IMAGE_HDR = sizeof (uint32_t) * 3; // not including pb_msg
 const ArgInfo EMPTY_ARGINFO = {};
@@ -165,8 +182,6 @@ void ArgInfoFree (ArgInfo* args);
 Images* ImagesConstructor (ArgInfo* args);
 void ImagesDestructor (Images* imgs);
 
-// If pid not needeed, pid = 0
-int WritePackedImage (PackedImage* img, const char* path, const char* name, int pid);
 // In this program pid's are keeping with this strange types. Sorry for strange args.
 void ChangeImagePid (const char* path, const char* name, const char* old_pid, int new_pid);
 void ImagesWrite (Images* imgs, ArgInfo* args);
@@ -199,6 +214,15 @@ size_t GoFile      (Elf_Nhdr* nhdr, Images* imgs);
 void GoLoadPhdr (Elf_Phdr* phdr, Images* imgs, size_t vma_counter);
 uint32_t GetVmaProtByPhdr (Elf_Word phdr_flags);
 
+// type of unpacker's return value == type of *unpacked_image
+// allocator for unpacker = default
+FILE* StartImageReading (const char* filename, CriuMagic expected_magic);
+int ReadMessage (MessageUnpacker unpacker, ProtobufCMessage** unpacked_image, FILE* file);
+int ReadOnlyOneMessage (const char* filename, MessageUnpacker unpacker, ProtobufCMessage** unpacked_image, CriuMagic expected_magic);
+
+FILE* StartImageWriting (const char* filename, CriuMagic magic);
+int WriteMessage (MessagePacker packer, const ProtobufCMessage* unpacked_image, size_t packed_image_size, FILE* file);
+int WriteOnlyOneMessage (const char* filename, MessagePacker packer, const void* unpacked_image, size_t packed_image_size, CriuMagic magic);
 /*  
     ToDo: threads, many processes.
 
@@ -225,7 +249,7 @@ uint32_t GetVmaProtByPhdr (Elf_Word phdr_flags);
             -mm_saved_auxv - working in GoAuxv - OK
             -vmas - it's program headers:
                 -start, end, prot - OK
-                -pgoffset - dependency exists, but I don't know it.
+                -pgoffset - no data dependency in coredump.py, do we need this field?
                 -shmid, flags, status - cannot recovery. You should hope, that values will match.
             -other - if (setarch -R) - skip, else count with vma. ToDo
 
