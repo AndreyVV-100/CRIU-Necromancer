@@ -10,6 +10,7 @@
 // #include <sys/user.h> included in procfs.h
 #include "criu_necromancer.h"
 #include "fileworking.h"
+#include "user.h"
 
 int main (int argc, char** argv)
 {
@@ -21,7 +22,10 @@ int main (int argc, char** argv)
     Images* imgs = ImagesConstructor (&args);
 
     if (elf != NULL && imgs != NULL)
+    {
         GoPhdrs (elf, imgs);
+        ImagesWrite (imgs, &args);
+    }
 
     ArgInfoFree (&args);
     ElfDestructor (elf);
@@ -137,7 +141,7 @@ int CreateImagesPath (ArgInfo* args)
 
     // ToDo: check / on path? Why I wrote it?
 
-    args->pstree  = CreateOneImagePath        (args->criu_dump_path, "pstree");
+    args->pstree  = CreateOneImagePath           (args->criu_dump_path, "pstree");
     args->core    = CreateOneImagePathWithStrPid (args->criu_dump_path, "core",    args->criu_dump_id);
     args->mm      = CreateOneImagePathWithStrPid (args->criu_dump_path, "mm",      args->criu_dump_id);
 
@@ -212,14 +216,23 @@ void ImagesWrite (Images* imgs, ArgInfo* args)
     assert (imgs->core);
     assert (imgs->mm);
 
-    WriteOnlyOneMessage (CreateOneImagePath (args->criu_dump_path, "pstree"), (MessagePacker*) pstree_entry__pack, 
-                         imgs->pstree, pstree_entry__get_packed_size (imgs->pstree), MY_PSTREE_MAGIC);
-    
-    WriteOnlyOneMessage (CreateOneImagePathWithIntPid (args->criu_dump_path, "core", imgs->pstree->pid), (MessagePacker*) core_entry__pack, 
-                         imgs->core,   core_entry__get_packed_size (imgs->core), MY_CORE_MAGIC);
+    char* filename = CreateOneImagePath (args->criu_dump_path, "pstree");
+    WriteOnlyOneMessage (filename, (MessagePacker*) pstree_entry__pack, imgs->pstree, 
+                         pstree_entry__get_packed_size (imgs->pstree), MY_PSTREE_MAGIC);
+    printf ("%lx\n", pstree_entry__get_packed_size (imgs->pstree));
+    free (filename);
 
-    WriteOnlyOneMessage (CreateOneImagePathWithIntPid (args->criu_dump_path, "mm",   imgs->pstree->pid), (MessagePacker*) mm_entry__pack, 
-                         imgs->mm,     mm_entry__get_packed_size (imgs->mm),     MY_MM_MAGIC);
+    filename = CreateOneImagePathWithIntPid (args->criu_dump_path, "core", imgs->pstree->pid);
+    WriteOnlyOneMessage (filename, (MessagePacker*) core_entry__pack, imgs->core,
+                         core_entry__get_packed_size (imgs->core), MY_CORE_MAGIC);
+    printf ("%lx\n", core_entry__get_packed_size (imgs->core));
+    free (filename);
+
+    filename = CreateOneImagePathWithIntPid (args->criu_dump_path, "mm", imgs->pstree->pid);
+    WriteOnlyOneMessage (filename, (MessagePacker*) mm_entry__pack, imgs->mm, 
+                         mm_entry__get_packed_size (imgs->mm), MY_MM_MAGIC);
+    printf ("%lx\n", mm_entry__get_packed_size (imgs->mm));
+    free (filename);
 
     // In my images I found 2 files, that need to be renamed: fs and ids.
     // core, mm and pagemap are renamed yet.
@@ -239,10 +252,6 @@ void ImagesDestructor (Images* imgs)
     pstree_entry__free_unpacked  (imgs->pstree,  NULL);
     core_entry__free_unpacked    (imgs->core,    NULL);
     mm_entry__free_unpacked      (imgs->mm,      NULL);
-
-    free (imgs->p_pstree);
-    free (imgs->p_core);
-    free (imgs->p_mm);
 
     *imgs = EMPTY_IMAGES;
     free (imgs);
@@ -348,7 +357,7 @@ void GoPhdrs (Elf* elf, Images* imgs)
         switch (elf->phdr_table[i_phdr].p_type)
         {
             case PT_NOTE:
-                GoNhdrs (elf->buf + elf->phdr_table[i_phdr].p_paddr, elf->phdr_table[i_phdr].p_filesz, imgs);
+                GoNhdrs (elf->buf + elf->phdr_table[i_phdr].p_offset, elf->phdr_table[i_phdr].p_filesz, imgs);
                 break;
 
             case PT_LOAD:
@@ -371,45 +380,50 @@ void GoNhdrs (void* nhdrs, Elf_Xword p_filesz, Images* imgs)
     assert (nhdrs);
     assert (imgs);
     size_t align = 0, common_align = 0;
-    
+    printf ("%lu\n", p_filesz);
+
     while (common_align < p_filesz)
     {
-        switch (((Elf_Nhdr*) nhdrs)->n_type)
+        Elf_Nhdr* nhdr_now = (Elf_Nhdr*)  nhdrs;
+
+        switch (nhdr_now->n_type)
         {
             // ToDo: auto align and return err status
 
             case NT_PRPSINFO:
-                align = GoPrpsinfo ((Elf_Nhdr*) nhdrs, imgs);
+                align = GoPrpsinfo (nhdr_now, imgs);
                 break;
             
             case NT_PRSTATUS:
-                align = GoPrstatus ((Elf_Nhdr*) nhdrs, imgs);
+                align = GoPrstatus (nhdr_now, imgs);
                 break;
 
             case NT_FPREGSET:
-                align = GoFpregset ((Elf_Nhdr*) nhdrs, imgs);
+                align = GoFpregset (nhdr_now, imgs);
                 break;
 
             case NT_X86_XSTATE:
-                align = GoX86_State ((Elf_Nhdr*) nhdrs, imgs);
+                align = GoX86_State (nhdr_now, imgs);
                 break;
 
             case NT_SIGINFO:
-                align = GoSiginfo ((Elf_Nhdr*) nhdrs, imgs);
+                align = GoSiginfo (nhdr_now, imgs);
                 break;
 
             case NT_AUXV:
-                align = GoAuxv ((Elf_Nhdr*) nhdrs, imgs);
+                align = GoAuxv (nhdr_now, imgs);
                 break;
 
             case NT_FILE:
-                align = GoFile ((Elf_Nhdr*) nhdrs, imgs);
+                align = GoFile (nhdr_now, imgs);
                 break;
 
             default:
                 // ToDo: Give more debug info
-                fprintf (stderr, "Warning: I don't know, how to parse note header with type %u.\n", 
-                        ((Elf_Nhdr*) nhdrs)->n_type);
+                fprintf (stderr, "Warning: I don't know, how to parse note header with type %u.\n"
+                                 "Is it gdb note header?\n", 
+                        (nhdr_now)->n_type);
+                align = sizeof (*nhdr_now) + GetAlignedSimple (nhdr_now->n_descsz) + GetAlignedSimple (nhdr_now->n_namesz);
                 break;
         }
 
@@ -426,29 +440,30 @@ void GoNhdrs (void* nhdrs, Elf_Xword p_filesz, Images* imgs)
     For note functions:
     Note = {Nhdr, name, desc}
 
-    Name and desc have align = 4
+    Name and desc have align = 4 or 8
 */
 
 // ToDo: Check name?
-// Note for offset: align of name = 4
-#define NHDR_START(type, name)  assert (nhdr);                                                                             \
-                                assert (imgs);                                                                             \
-                                assert (nhdr->n_type == type);                                                             \
-                                                                                                                           \
-                                if (nhdr->n_descsz != sizeof (name##_t))                                                   \
-                                    fprintf (stderr, "Error: Bad n_descsz in %s:\n"                                        \
-                                                     "Expected: sizeof (" #name ") = %lu\n"                                \
-                                                     "Detected: %u\n", __func__, sizeof (name##_t), nhdr->n_descsz);       \
-                                                                                                                           \
-                                size_t offset = sizeof (*nhdr) + (nhdr->n_namesz + 3) % 4;                                 \
-                                name##_t* name = (name##_t*) (((void*) nhdr) + offset)
+// Note for offset: align of name = 4 or 8
+#define NHDR_START(type, name, is_array)  \
+            assert (nhdr);                                                                                     \
+            assert (imgs);                                                                                     \
+            assert (nhdr->n_type == type);                                                                     \
+                                                                                                               \
+            if (nhdr->n_descsz != sizeof (name##_t) && !is_array)                                              \
+                fprintf (stderr, "Error: Bad n_descsz in %s:\n"                                                \
+                                 "Expected: sizeof (" #name ") = %lu\n"                                        \
+                                 "Detected: %u\n", __func__, sizeof (name##_t), nhdr->n_descsz);               \
+                                                                                                               \
+            size_t offset = sizeof (*nhdr) + GetAlignedSimple (nhdr->n_namesz);                                  \
+            name##_t* name = (name##_t*) (((void*) nhdr) + offset)
 
 // align of desc = 4
-#define NHDR_RETURN return offset + (nhdr->n_descsz + 3) % 4
+#define NHDR_RETURN return offset + GetAlignedSimple (nhdr->n_descsz)
 
 size_t GoPrpsinfo (Elf_Nhdr* nhdr, Images* imgs)
 {
-    NHDR_START (NT_PRPSINFO, prpsinfo);
+    NHDR_START (NT_PRPSINFO, prpsinfo, 0);
 
     #define TASK_ALIVE 0x1
     #define TASK_DEAD  0x2
@@ -480,11 +495,22 @@ size_t GoPrpsinfo (Elf_Nhdr* nhdr, Images* imgs)
     imgs->pstree->pgid = prpsinfo->pr_pgrp;
     imgs->pstree->sid  = prpsinfo->pr_sid;
 
+    // ToDo: This code was created only for one-thread program
+    if (imgs->pstree->n_threads == 1)
+        imgs->pstree->threads[0] = prpsinfo->pr_pid;
+    else
+    {
+        fprintf (stderr, "Warning: number of threads in programs isn't equal.\n");
+        imgs->pstree->n_threads = 1; // I think that this action didn't affect to free()
+        imgs->pstree->threads[0] = prpsinfo->pr_pid; // but if threads == NULL?
+    }
+
     // ToDo: Psarg - it's command line, working with memory and chunks.
     // prpsinfo->pr_psargs;
 
-    free (imgs->core->tc->comm);
-    imgs->core->tc->comm = strdup (prpsinfo->pr_fname);
+    // It's useless (because exec_names are equal) and dangerous (because pr_fname[16])
+    // free (imgs->core->tc->comm); 
+    // imgs->core->tc->comm = strdup (prpsinfo->pr_fname);
 
     #undef TASK_ALIVE
     #undef TASK_DEAD
@@ -494,7 +520,7 @@ size_t GoPrpsinfo (Elf_Nhdr* nhdr, Images* imgs)
 
 size_t GoPrstatus (Elf_Nhdr* nhdr, Images* imgs)
 {
-    NHDR_START (NT_PRSTATUS, prstatus);
+    NHDR_START (NT_PRSTATUS, prstatus, 0);
 
     // ToDo: Other platforms?
     UserX86RegsEntry* regs = imgs->core->thread_info->gpregs;
@@ -533,7 +559,7 @@ size_t GoPrstatus (Elf_Nhdr* nhdr, Images* imgs)
 
 size_t GoFpregset (Elf_Nhdr* nhdr, Images* imgs)
 {
-    NHDR_START (NT_FPREGSET, elf_fpregset);
+    NHDR_START (NT_FPREGSET, elf_fpregset, 0);
 
     UserX86FpregsEntry* regs = imgs->core->thread_info->fpregs;
     regs->cwd = elf_fpregset->cwd;
@@ -544,7 +570,17 @@ size_t GoFpregset (Elf_Nhdr* nhdr, Images* imgs)
     regs->rdp = elf_fpregset->rdp;
     regs->mxcsr = elf_fpregset->mxcsr;
     regs->mxcsr_mask = elf_fpregset->mxcr_mask;
-    memcpy (regs->st_space,  elf_fpregset->st_space,  sizeof (elf_fpregset->st_space));
+    
+    if (sizeof (elf_fpregset->st_space) / sizeof (elf_fpregset->st_space[0]) != regs->n_st_space)
+        fprintf (stderr, "Warning: st_space in coredump isn't equal st_space in criu images.\n"
+                         "n_st_space [criu] = %zu\n"
+                         "sizeof (st_space) [coredump] = %zu\n", regs->n_st_space, sizeof (elf_fpregset->st_space));
+    memcpy (regs->st_space,  elf_fpregset->st_space,  regs->n_st_space);
+
+    if (sizeof (elf_fpregset->xmm_space) / sizeof (elf_fpregset->xmm_space[0]) != regs->n_xmm_space)
+        fprintf (stderr, "Warning: xmm_space in coredump isn't equal xmm_space in criu images.\n"
+                         "n_xmm_space [criu] = %zu\n"
+                         "sizeof (xmm_space) [coredump] = %zu\n", regs->n_xmm_space, sizeof (elf_fpregset->xmm_space));
     memcpy (regs->xmm_space, elf_fpregset->xmm_space, sizeof (elf_fpregset->xmm_space));
     
     NHDR_RETURN;
@@ -552,42 +588,67 @@ size_t GoFpregset (Elf_Nhdr* nhdr, Images* imgs)
 
 size_t GoX86_State (Elf_Nhdr* nhdr, Images* imgs)
 {
-    typedef struct xsave_struct xsave_t;
-    NHDR_START (NT_X86_XSTATE, xsave);
-
+    NHDR_START (NT_X86_XSTATE, xsave, 0);
     UserX86FpregsEntry* regs = imgs->core->thread_info->fpregs;
-    regs->twd = xsave->i387.twd;
-    // ToDo: st_space, xmm_space as in previos function?
 
     if (regs->xsave == NULL)
     {
         fprintf (stderr, "Warning: UserX86XsaveEntry doesn't exist yet. Creating it...\n");
         regs->xsave = (UserX86XsaveEntry*) calloc (1, sizeof (*(regs->xsave)));
+        user_x86_xsave_entry__init (regs->xsave);
     }
 
-    regs->xsave->xstate_bv = xsave->xsave_hdr.xstate_bv;
+    // regs->xsave->xstate_bv = xsave->xsave_hdr.xstate_bv;
     free (regs->xsave->ymmh_space);
     regs->xsave->ymmh_space = (uint32_t*) calloc (1, sizeof (xsave->ymmh));
     memcpy (regs->xsave->ymmh_space, &(xsave->ymmh), sizeof (xsave->ymmh));
+    regs->xsave->n_ymmh_space = sizeof (xsave->ymmh) / sizeof (regs->xsave->ymmh_space[0]);
+
+    // ToDo: Do I need do something another here?
 
     NHDR_RETURN;
 }
 
 size_t GoSiginfo (Elf_Nhdr* nhdr, Images* imgs)
 {
-    NHDR_START (NT_SIGINFO, siginfo);
+    NHDR_START (NT_SIGINFO, siginfo, 0);
     static size_t new_pos = 0;
-    // ToDo: new_pos < n_signals after working program?
-    if (new_pos >= imgs->core->tc->signals_s->n_signals)
-    {
-        fprintf (stderr, "Error: amount of siginfo_t structs >= n_signals. Maybe fix it in this program?\n");
-        return 0;
-    }
+    SignalQueueEntry* signals_s = imgs->core->tc->signals_s;
 
-    // ToDo: Is it correct? Here was:
-    // memcpy (imgs->core->tc->signals_s->signals[new_pos]->siginfo.data, siginfo->si_code, nhdr->n_descsz);
-    // But it's incorrect. I don't know, what I meant when I wrote this one year ago.
-    memcpy (imgs->core->tc->signals_s->signals[new_pos]->siginfo.data, &(siginfo->si_code), nhdr->n_descsz);
+    // ToDo: new_pos < n_signals after working program?
+    if (new_pos >= signals_s->n_signals)
+    {
+        // fprintf (stderr, "Error: amount of siginfo_t structs >= n_signals. Maybe fix it in this program?\n");
+        // NHDR_RETURN;
+
+        // ToDo: I'm not sure, but it can work
+        signals_s->n_signals++; // always imgs->core->tc->signals_s->n_signals + 1 > new_pos
+        signals_s->signals = realloc (signals_s->signals, signals_s->n_signals * sizeof (*signals_s->signals)); // realloc (NULL) = malloc
+        signals_s->signals[new_pos] = calloc (1, sizeof (*signals_s->signals[new_pos]));
+        siginfo_entry__init (signals_s->signals[new_pos]);
+    }
+    
+    signals_s->signals[new_pos]->siginfo.len = sizeof (*siginfo);
+    free (signals_s->signals[new_pos]->siginfo.data);
+    signals_s->signals[new_pos]->siginfo.data = calloc (1, sizeof (*siginfo));
+    memcpy (signals_s->signals[new_pos]->siginfo.data, siginfo, sizeof (*siginfo));
+
+    /*
+    I found it in criu/cr-restore.c
+        static int signal_to_mem(SiginfoEntry *se)
+        {
+            siginfo_t *info, *t;
+
+            info = (siginfo_t *)se->siginfo.data;
+            t = rst_mem_alloc(sizeof(siginfo_t), RM_PRIVATE);
+            if (!t)
+                return -1;
+
+            memcpy(t, info, sizeof(*info));
+
+            return 0;
+        }
+    */
 
     new_pos++;
     NHDR_RETURN;
@@ -595,11 +656,15 @@ size_t GoSiginfo (Elf_Nhdr* nhdr, Images* imgs)
 
 size_t GoAuxv (Elf_Nhdr* nhdr, Images* imgs)
 {
-    NHDR_START (NT_AUXV, Elf_auxv);
+    NHDR_START (NT_AUXV, Elf_auxv, 1);
+
+    if (nhdr->n_descsz % (2 * sizeof (*imgs->mm->mm_saved_auxv))) // ToDo: It's ok?
+        fprintf (stderr, "Warning: In my opinion, auxv in coredump is broken.\n");
 
     free (imgs->mm->mm_saved_auxv);
-    imgs->mm->mm_saved_auxv = (uint64_t*) calloc (1, nhdr->n_descsz + 1);
-    memcpy (imgs->mm->mm_saved_auxv, Elf_auxv, nhdr->n_descsz); // ToDo: check n_descsz % 16 == 0?
+    imgs->mm->mm_saved_auxv = (uint64_t*) calloc (1, nhdr->n_descsz);
+    memcpy (imgs->mm->mm_saved_auxv, Elf_auxv, nhdr->n_descsz);
+    imgs->mm->n_mm_saved_auxv = nhdr->n_descsz / sizeof (*imgs->mm->mm_saved_auxv);
 
     NHDR_RETURN;
 }
@@ -618,8 +683,10 @@ typedef struct
 
 size_t GoFile (Elf_Nhdr* nhdr, Images* imgs) // ToDo: not working function
 {
-    NHDR_START (NT_FILE, file);
+    NHDR_START (NT_FILE, file, 1);
+    (void) file;
 
+    /*  ToDo: this is incorrect function. Rewrite it.
     if (imgs->mm->n_vmas != (size_t) file->count)
     {
         fprintf (stderr, "Error (FIXME): n_vmas != count in NT_FILE.\n");
@@ -632,8 +699,9 @@ size_t GoFile (Elf_Nhdr* nhdr, Images* imgs) // ToDo: not working function
     {
         imgs->mm->vmas[i_vma]->start = file->array[i_vma].start;
         imgs->mm->vmas[i_vma]->end   = file->array[i_vma].end;
-        imgs->mm->vmas[i_vma]->pgoff = file->array[i_vma].file_ofs * PAGESIZE;
+        imgs->mm->vmas[i_vma]->pgoff = file->array[i_vma].file_ofs * PAGESIZE;     
     }
+    */
 
     NHDR_RETURN;
 }
@@ -693,8 +761,8 @@ FILE* StartImageReading (const char* filename, CriuMagic expected_magic)
     }
 
     CriuMagic magic = {};
-    size_t err = fread (&magic, sizeof (magic), 1, file);
-    if (err != sizeof (magic) || CompareMagic (magic, expected_magic))
+    size_t err = fread (&magic, 1, sizeof (magic), file);
+    if (err != sizeof (magic) || !CompareMagic (magic, expected_magic))
     {
         fprintf (stderr, "Bad magic in file %s.\n", filename);
         return NULL;
@@ -711,7 +779,7 @@ int ReadMessage (MessageUnpacker unpacker, ProtobufCMessage** unpacked_image, FI
     assert (unpacked_image);
 
     uint32_t size = 0;
-    size_t err = fread (&size, sizeof (size),  1, file);
+    size_t err = fread (&size, 1,  sizeof (size), file);
     if (err != sizeof (size))
     {
         perror ("Can't read image size. Maybe bad file?");
@@ -725,7 +793,7 @@ int ReadMessage (MessageUnpacker unpacker, ProtobufCMessage** unpacked_image, FI
         return -1;
     }
 
-    err = fread (packed_data, size, 1, file);
+    err = fread (packed_data, 1, size, file);
     if (err != size)
     {
         fprintf (stderr, "Can't read %u bytes as packed image. Maybe bad file?\n", size);
@@ -759,14 +827,14 @@ FILE* StartImageWriting (const char* filename, CriuMagic magic)
 {
     assert (filename);
 
-    FILE* file = fopen (filename, "r");
+    FILE* file = fopen (filename, "w");
     if (!file)
     {
         fprintf (stderr, "Can't open file %s\n", filename);
         return NULL;
     }
 
-    size_t err = fwrite (&magic, sizeof (magic), 1, file);
+    size_t err = fwrite (&magic, 1, sizeof (magic), file);
     if (err != sizeof (magic))
     {
         perror ("Write error");
@@ -791,8 +859,8 @@ int WriteMessage (MessagePacker packer, const ProtobufCMessage* unpacked_image, 
     }
 
     packer (unpacked_image, packed_image);
-    size_t err = fwrite (&packed_image_size, sizeof (uint32_t), 1, file); // very bad place, but it's only criu images standart
-    err += fwrite (&packed_image, packed_image_size, 1, file);
+    size_t err = fwrite (&packed_image_size, 1, sizeof (uint32_t), file); // very bad place, but it's only criu images standart
+    err += fwrite (packed_image, 1, packed_image_size, file);
 
     if (err != packed_image_size + sizeof (uint32_t))
         perror ("Write error");

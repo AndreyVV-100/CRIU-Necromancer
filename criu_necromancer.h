@@ -118,16 +118,6 @@ typedef struct
     // ToDo: pstree and pagemap work with array?
 */
 
-// ToDo: check magics (see criu/include/magic.h (https://github.com/checkpoint-restore/criu/blob/criu-dev/criu/include/magic.h))
-typedef struct
-{
-    uint32_t magic0; // in V1.1
-    uint32_t magic1;
-    uint32_t size0;
-    uint8_t  pb_msg; // using only as pointer: &(p_img->pb_msg). sizeof (pb_msg) == size0
-} PackedImage; // ToDo: useless?
-
-
 typedef struct
 {
     PstreeEntry* pstree;
@@ -135,11 +125,6 @@ typedef struct
     MmEntry* mm;
     // PagemapEntry* pagemap; // pagemap[0] = pages_id; pages-id.img - raw data
     // FileEntry* files;
-
-    // packed data
-    PackedImage* p_pstree;
-    PackedImage* p_core;
-    PackedImage* p_mm;
 
     // int reserved;
 } Images; 
@@ -202,6 +187,12 @@ void GoNhdrs (void* nhdrs, Elf_Xword p_filesz, Images* imgs);
           Instead of:    one  header  -> many images
     ???
 */
+
+static inline size_t GetAligned (size_t value, size_t align)
+{
+    return value + (align - value % align) % align;
+}
+#define GetAlignedSimple(value) GetAligned (value, sizeof (value))
 
 size_t GoPrpsinfo  (Elf_Nhdr* nhdr, Images* imgs);
 size_t GoPrstatus  (Elf_Nhdr* nhdr, Images* imgs);
