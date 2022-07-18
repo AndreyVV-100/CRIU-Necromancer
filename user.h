@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 // Copypasted from https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/arch/x86/include/asm/user.h
+// It's used for working with NT_X86_XSTATE note header
 
 #ifndef _ASM_X86_USER_H
 #define _ASM_X86_USER_H

@@ -1,4 +1,3 @@
-#include <stdio.h>
 #include <elf.h>
 #include <malloc.h>
 #include <assert.h>
@@ -7,10 +6,10 @@
 #include <sys/procfs.h>
 #include <signal.h>
 #include <compel/asm/fpu.h>
+#include <sys/mman.h>
 // #include <sys/user.h> included in procfs.h
 #include "criu_necromancer.h"
 #include "fileworking.h"
-#include "user.h"
 
 int main (int argc, char** argv)
 {
@@ -139,15 +138,15 @@ int CreateImagesPath (ArgInfo* args)
                                         return 1;                                            \
                                     }
 
-    // ToDo: check / on path? Why I wrote it?
-
     args->pstree  = CreateOneImagePath           (args->criu_dump_path, "pstree");
     args->core    = CreateOneImagePathWithStrPid (args->criu_dump_path, "core",    args->criu_dump_id);
     args->mm      = CreateOneImagePathWithStrPid (args->criu_dump_path, "mm",      args->criu_dump_id);
+    args->pagemap = CreateOneImagePathWithStrPid (args->criu_dump_path, "pagemap", args->criu_dump_id);
 
     check_pointer (pstree)
     check_pointer (core)
     check_pointer (mm)
+    check_pointer (pagemap)
     
     #undef check_pointer
     return 0;
@@ -159,6 +158,7 @@ void ArgInfoFree (ArgInfo* args)
     free (args->pstree);                        
     free (args->core);
     free (args->mm);
+    free (args->pagemap);
 
     *args = EMPTY_ARGINFO;
     return;
@@ -179,7 +179,7 @@ Images* ImagesConstructor (ArgInfo* args)
         return NULL;                                      
     }
 
-    #define check_retval(retval) if ((retval) == -1)                                         \
+    #define check_retval(retval) if ((retval))                                             \
                                     {                                                      \
                                         fprintf (stderr, "Error: Can't create images.\n"); \
                                         ArgInfoFree (args);                                \
@@ -187,9 +187,20 @@ Images* ImagesConstructor (ArgInfo* args)
                                         return NULL;                                       \
                                     } 
 
-    check_retval (ReadOnlyOneMessage (args->pstree, (MessageUnpacker*) pstree_entry__unpack, (ProtobufCMessage**) &(imgs->pstree), MY_PSTREE_MAGIC));
-    check_retval (ReadOnlyOneMessage (args->core,   (MessageUnpacker*) core_entry__unpack,   (ProtobufCMessage**) &(imgs->core),   MY_CORE_MAGIC));
-    check_retval (ReadOnlyOneMessage (args->mm,     (MessageUnpacker*) mm_entry__unpack,     (ProtobufCMessage**) &(imgs->mm),     MY_MM_MAGIC));
+    check_retval (ReadOnlyOneMessage (args->pstree, (MessageUnpacker*) pstree_entry__unpack, (ProtobufCMessage**) &(imgs->pstree), MY_PSTREE_MAGIC) == -1);
+    check_retval (ReadOnlyOneMessage (args->core,   (MessageUnpacker*) core_entry__unpack,   (ProtobufCMessage**) &(imgs->core),   MY_CORE_MAGIC)   == -1);
+    check_retval (ReadOnlyOneMessage (args->mm,     (MessageUnpacker*) mm_entry__unpack,     (ProtobufCMessage**) &(imgs->mm),     MY_MM_MAGIC)     == -1);
+
+    imgs->pagemap = StartImageWriting (args->pagemap, MY_PAGEMAP_MAGIC);
+    check_retval (imgs->pagemap == NULL)
+    
+    // In my situation criu always creates pagemap-pid.img and pages-1.img. I don't know, how could it be otherwise.
+    PagemapHead head = PAGEMAP_HEAD__INIT;
+    head.pages_id = 1;
+    WriteMessage ((MessagePacker*) pagemap_head__pack, (ProtobufCMessage*) &head, pagemap_head__get_packed_size (&head), imgs->pagemap);
+
+    imgs->pages = fopen ("pages-1.img", "w"); // It's raw data, there is no protobuf messages.
+    check_retval (imgs->pages == NULL)
 
     #undef check_retval
     return imgs;
@@ -219,27 +230,25 @@ void ImagesWrite (Images* imgs, ArgInfo* args)
     char* filename = CreateOneImagePath (args->criu_dump_path, "pstree");
     WriteOnlyOneMessage (filename, (MessagePacker*) pstree_entry__pack, imgs->pstree, 
                          pstree_entry__get_packed_size (imgs->pstree), MY_PSTREE_MAGIC);
-    printf ("%lx\n", pstree_entry__get_packed_size (imgs->pstree));
     free (filename);
 
     filename = CreateOneImagePathWithIntPid (args->criu_dump_path, "core", imgs->pstree->pid);
     WriteOnlyOneMessage (filename, (MessagePacker*) core_entry__pack, imgs->core,
                          core_entry__get_packed_size (imgs->core), MY_CORE_MAGIC);
-    printf ("%lx\n", core_entry__get_packed_size (imgs->core));
     free (filename);
 
     filename = CreateOneImagePathWithIntPid (args->criu_dump_path, "mm", imgs->pstree->pid);
     WriteOnlyOneMessage (filename, (MessagePacker*) mm_entry__pack, imgs->mm, 
                          mm_entry__get_packed_size (imgs->mm), MY_MM_MAGIC);
-    printf ("%lx\n", mm_entry__get_packed_size (imgs->mm));
     free (filename);
 
     // In my images I found 2 files, that need to be renamed: fs and ids.
     // core, mm and pagemap are renamed yet.
     // ToDo: find all files in documentation.
 
-    ChangeImagePid (args->criu_dump_path, "fs",  args->criu_dump_id, imgs->pstree->pid);
-    ChangeImagePid (args->criu_dump_path, "ids", args->criu_dump_id, imgs->pstree->pid);
+    ChangeImagePid (args->criu_dump_path, "fs",      args->criu_dump_id, imgs->pstree->pid);
+    ChangeImagePid (args->criu_dump_path, "ids",     args->criu_dump_id, imgs->pstree->pid);
+    ChangeImagePid (args->criu_dump_path, "pagemap", args->criu_dump_id, imgs->pstree->pid);
 
     return;
 }
@@ -252,6 +261,8 @@ void ImagesDestructor (Images* imgs)
     pstree_entry__free_unpacked  (imgs->pstree,  NULL);
     core_entry__free_unpacked    (imgs->core,    NULL);
     mm_entry__free_unpacked      (imgs->mm,      NULL);
+    fclose (imgs->pagemap);
+    fclose (imgs->pages);
 
     *imgs = EMPTY_IMAGES;
     free (imgs);
@@ -361,7 +372,10 @@ void GoPhdrs (Elf* elf, Images* imgs)
                 break;
 
             case PT_LOAD:
-                // GoLoadPhdr (elf->phdr_table + i_phdr, imgs, vma_counter);
+                if (GoLoadPhdr (elf, elf->phdr_table + i_phdr, imgs, vma_counter))
+                {
+                    return; // ToDo: Ban writing?
+                }
                 vma_counter++;
                 break;
 
@@ -380,7 +394,6 @@ void GoNhdrs (void* nhdrs, Elf_Xword p_filesz, Images* imgs)
     assert (nhdrs);
     assert (imgs);
     size_t align = 0, common_align = 0;
-    printf ("%lu\n", p_filesz);
 
     while (common_align < p_filesz)
     {
@@ -486,7 +499,7 @@ size_t GoPrpsinfo (Elf_Nhdr* nhdr, Images* imgs)
             break;
     }
 
-    imgs->core->thread_core->sched_prio = prpsinfo->pr_nice; // ToDo: sched_prio not in thread_core?
+    imgs->core->thread_core->sched_prio = prpsinfo->pr_nice; // sched_prio not in thread_core?
     imgs->core->tc->flags = prpsinfo->pr_flag;
     imgs->core->thread_core->creds->uid = prpsinfo->pr_uid;
     imgs->core->thread_core->creds->gid = prpsinfo->pr_gid;
@@ -505,8 +518,8 @@ size_t GoPrpsinfo (Elf_Nhdr* nhdr, Images* imgs)
         imgs->pstree->threads[0] = prpsinfo->pr_pid; // but if threads == NULL?
     }
 
-    // ToDo: Psarg - it's command line, working with memory and chunks.
-    // prpsinfo->pr_psargs;
+    // prpsinfo->pr_psargs; // psarg - comand line's arguments. 
+    // They are contained in stack, working with psarg, as I think, useless.
 
     // It's useless (because exec_names are equal) and dangerous (because pr_fname[16])
     // free (imgs->core->tc->comm); 
@@ -669,22 +682,27 @@ size_t GoAuxv (Elf_Nhdr* nhdr, Images* imgs)
     NHDR_RETURN;
 }
 
-// ToDo: where get file_t?
-struct file_array
-{
-    long start, end, file_ofs;
-};
-
-typedef struct
-{
-    long count, pagesize;
-    struct file_array array[]; // As my tests show, it is correct.
-} file_t;
-
 size_t GoFile (Elf_Nhdr* nhdr, Images* imgs) // ToDo: not working function
 {
     NHDR_START (NT_FILE, file, 1);
     (void) file;
+    VmaEntry** vmas = imgs->mm->vmas;
+
+    for (size_t i_vma = 0, i_file = 0; i_vma < imgs->mm->n_vmas; i_vma++)
+    {
+        if (vmas[i_vma]->shmid == 0) // isn't file
+            continue;
+
+        // This printf shows full match between NT_FILE nhdr and vma with shmid != 0.
+        // But now I don't know how to use it because PT_LOAD phdrs contains all necessary information.
+        // printf ("shmid = %ld filename = %s [coredump] = %lX [criu] = %lX\n", 
+        //                                 vmas[i_vma]->shmid,
+        //                                 GetFilenameByNumInNTFile (file, i_file),
+        //                                 file->array[i_file].end - file->array[i_file].start,
+        //                                 vmas[i_vma]->end - vmas[i_vma]->start);
+
+        i_file++;
+    }
 
     /*  ToDo: this is incorrect function. Rewrite it.
     if (imgs->mm->n_vmas != (size_t) file->count)
@@ -706,27 +724,99 @@ size_t GoFile (Elf_Nhdr* nhdr, Images* imgs) // ToDo: not working function
     NHDR_RETURN;
 }
 
+char* GetFilenameByNumInNTFile (file_t* file, size_t file_num) // ToDo: Very slow, if you use it in cycle
+{
+    assert (file);
+
+    char* str = (char*) file + sizeof (*file) + file->count * sizeof (file->array[0]);
+    for (size_t i_str = 0; i_str < file_num; i_str++)
+        str = str + strlen (str) +  1;
+
+    return str;
+}
+
 #undef NHDR_START
 #undef NHDR_RETURN
 
-// ToDo: problem: n_vmas != phnum - 1 ====> coping in cycle as now is incorrect.
-void GoLoadPhdr (Elf_Phdr* phdr, Images* imgs, size_t vma_counter) 
+int GoLoadPhdr (Elf* elf, Elf_Phdr* phdr, Images* imgs, size_t vma_counter) 
 {
+    assert (elf);
     assert (phdr);
     assert (imgs);
 
-    if (imgs->mm->n_vmas <= vma_counter)
+#define check_correct(cond, str) if ((cond))                \
+                                 {                          \
+                                     fprintf (stderr, str); \
+                                     return -1;             \
+                                 }
+
+
+    check_correct (vma_counter >= imgs->mm->n_vmas, "Error: criu dump has less vmas than needed.\n")
+    check_correct (phdr->p_filesz % PAGESIZE, "Error: PT_LOAD phdr size isn't aligned.\n")
+    check_correct (phdr->p_memsz > phdr->p_filesz, "Error: In some program header memsz > filesz."
+                                                   "It means, that coredump isn't full and generated images is incorrect.\n")
+
+    VmaEntry* vma = imgs->mm->vmas[vma_counter];
+    check_correct (phdr->p_filesz != vma->end - vma->start, "Error: vma and following phdr have different sizes.\n")
+
+    MmChangeIfNeeded (imgs->mm, vma, phdr);
+
+    vma->start = phdr->p_vaddr;
+    vma->end   = phdr->p_vaddr + phdr->p_filesz;
+    // pgoff, shmid, prot, flags, status, flags, fd, fdflags --- I hope it's equal
+
+    PagemapEntry pagemap = PAGEMAP_ENTRY__INIT;
+    pagemap.vaddr = phdr->p_vaddr;
+    pagemap.nr_pages = phdr->p_filesz / PAGESIZE;
+    pagemap.has_flags = 1; // ToDo: Is it correct?
+    pagemap.flags = PE_PRESENT;
+
+    WriteMessage ((MessagePacker*) pagemap_entry__pack, (ProtobufCMessage*) &pagemap, 
+                  pagemap_entry__get_packed_size (&pagemap), imgs->pagemap);
+
+    fwrite ((char*) elf->buf + phdr->p_offset, 1, phdr->p_filesz, imgs->pages);
+    #undef check_correct
+    return 0;
+}
+
+void MmChangeIfNeeded (MmEntry* mm, VmaEntry* vma, Elf_Phdr* phdr)
+{
+    assert (mm);
+    assert (vma);
+    assert (phdr);
+
+    if (mm->mm_start_code == vma->start)
     {
-        fprintf (stderr, "Cannot write vma because counter out of n_vmas. Fixme!\n");
+        mm->mm_start_code = phdr->p_vaddr;
+        mm->mm_end_code   = phdr->p_vaddr + phdr->p_filesz;
         return;
     }
 
-    VmaEntry* vma = imgs->mm->vmas[vma_counter];
-    printf ("%lX - %lX = %ld\n", vma->start, phdr->p_vaddr, vma->start - phdr->p_vaddr);
-    vma->start = phdr->p_vaddr;
-    vma->end   = phdr->p_vaddr + phdr->p_memsz;
-    // vma->pgoff = phdr->p_offset;
-    vma->prot  = GetVmaProtByPhdr (phdr->p_flags);
+    if (mm->mm_start_data == vma->start)
+    {
+        mm->mm_start_data = phdr->p_vaddr;
+        mm->mm_end_data   = phdr->p_vaddr + phdr->p_filesz;
+        return;
+    }
+
+    if (vma->flags & MAP_GROWSDOWN)
+    {
+        mm->mm_start_stack = phdr->p_vaddr + mm->mm_start_stack - vma->start;
+        mm->mm_arg_start   = phdr->p_vaddr + mm->mm_arg_start   - vma->start;
+        mm->mm_arg_end     = phdr->p_vaddr + mm->mm_arg_end     - vma->start;
+        mm->mm_env_start   = phdr->p_vaddr + mm->mm_env_start   - vma->start;
+        mm->mm_env_end     = phdr->p_vaddr + mm->mm_env_end     - vma->start;
+        return;
+    }
+
+    if (vma->status & VMA_AREA_HEAP)
+    {
+        mm->mm_start_brk = phdr->p_vaddr;
+        mm->mm_brk       = phdr->p_vaddr + phdr->p_filesz;
+        return;
+    }
+
+    return;
 }
 
 uint32_t GetVmaProtByPhdr (Elf_Word phdr_flags)

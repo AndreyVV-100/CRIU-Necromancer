@@ -4,6 +4,10 @@
 #include "Images/pagemap.pb-c.h"
 #include "Images/fdinfo.pb-c.h"
 
+#include <stdio.h>
+#include "user.h"
+#include "file.h"
+
 #ifdef MODE32
 
     #define Elf_Half    Elf32_Half
@@ -75,6 +79,7 @@ typedef struct
     char* pstree;
     char* core;
     char* mm;
+    char* pagemap;
 } ArgInfo;
 
 typedef struct
@@ -123,6 +128,7 @@ typedef struct
     PstreeEntry* pstree;
     CoreEntry* core;
     MmEntry* mm;
+    FILE *pagemap, *pages;
     // PagemapEntry* pagemap; // pagemap[0] = pages_id; pages-id.img - raw data
     // FileEntry* files;
 
@@ -151,6 +157,9 @@ const size_t SIZEOF_P_IMAGE_HDR = sizeof (uint32_t) * 3; // not including pb_msg
 const ArgInfo EMPTY_ARGINFO = {};
 const Images  EMPTY_IMAGES  = {};
 const size_t PAGESIZE = 4096;
+
+#define PE_PRESENT (1 << 2) // copypasted from criu/include/pagemap.h
+#define VMA_AREA_HEAP (1 << 5) // copypasted from criu/include/image.h
 
 #define MAX_PATH_LEN 1024
 
@@ -202,7 +211,10 @@ size_t GoSiginfo   (Elf_Nhdr* nhdr, Images* imgs);
 size_t GoAuxv      (Elf_Nhdr* nhdr, Images* imgs);
 size_t GoFile      (Elf_Nhdr* nhdr, Images* imgs);
 
-void GoLoadPhdr (Elf_Phdr* phdr, Images* imgs, size_t vma_counter);
+char* GetFilenameByNumInNTFile (file_t* file, size_t file_num);
+
+int GoLoadPhdr (Elf* elf, Elf_Phdr* phdr, Images* imgs, size_t vma_counter);
+void MmChangeIfNeeded (MmEntry* mm, VmaEntry* vma, Elf_Phdr* phdr);
 uint32_t GetVmaProtByPhdr (Elf_Word phdr_flags);
 
 // type of unpacker's return value == type of *unpacked_image
@@ -238,14 +250,11 @@ int WriteOnlyOneMessage (const char* filename, MessagePacker packer, const void*
 
     -mm - mm_entry in mm.proto:
             -mm_saved_auxv - working in GoAuxv - OK
-            -vmas - it's program headers:
-                -start, end, prot - OK
-                -pgoffset - no data dependency in coredump.py, do we need this field?
-                -shmid, flags, status - cannot recovery. You should hope, that values will match.
-            -other - if (setarch -R) - skip, else count with vma. ToDo
+            -vmas - OK, but I hope thas phdrs <==> vmas (and pages too)
+            -mm_arg, mm_env, mm_stack - Now is calculated by simple way. In other situations very hard, ToDo
+            -mm_brk, mm_code, mm_data - simple writing it
 
-    -pagemap - count adresses with vma? Or skip a.k.a. other in mm? ToDo
-               but adresses isn't equivalent vmas' it isn't trivial. Skip before good time.
+    -pagemap - OK, but I hope thas phdrs <==> pages (and vmas too)
 
     -timens - responsible for time, skipping
 
