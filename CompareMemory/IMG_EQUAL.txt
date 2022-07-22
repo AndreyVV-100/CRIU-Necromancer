@@ -1,0 +1,221 @@
+                {
+                    "start": "0x555772de5000",
+                    "end": "0x555772deb000",
+                    "pgoff": 4096,
+                    "shmid": 1,
+                    "prot": "PROT_READ | PROT_EXEC",
+                    "flags": "MAP_PRIVATE",
+                    "status": "VMA_AREA_REGULAR | VMA_FILE_PRIVATE",
+                    "fd": -1,
+                    "fdflags": "0x0"
+                },
+
+        {
+            "vaddr": "0x555772de5000",
+            "nr_pages": 1,
+            "flags": "PE_PRESENT"
+        },
+
+                {
+                    "start": "0x555772dee000",
+                    "end": "0x555772def000",
+                    "pgoff": 36864,
+                    "shmid": 1,
+                    "prot": "PROT_READ",
+                    "flags": "MAP_PRIVATE",
+                    "status": "VMA_AREA_REGULAR | VMA_FILE_PRIVATE",
+                    "fd": -1,
+                    "fdflags": "0x0"
+                },
+
+                {
+                    "start": "0x555772def000",
+                    "end": "0x555772df0000",
+                    "pgoff": 40960,
+                    "shmid": 1,
+                    "prot": "PROT_READ | PROT_WRITE",
+                    "flags": "MAP_PRIVATE",
+                    "status": "VMA_AREA_REGULAR | VMA_FILE_PRIVATE",
+                    "fd": -1,
+                    "fdflags": "0x0"
+                },
+
+        {
+            "vaddr": "0x555772dee000",
+            "nr_pages": 2,
+            "flags": "PE_PRESENT"
+        },
+
+                {
+                    "start": "0x555773632000",
+                    "end": "0x555773653000",
+                    "pgoff": 0,
+                    "shmid": 0,
+                    "prot": "PROT_READ | PROT_WRITE",
+                    "flags": "MAP_PRIVATE | MAP_ANON",
+                    "status": "VMA_AREA_REGULAR | VMA_AREA_HEAP | VMA_ANON_PRIVATE",
+                    "fd": -1
+                },
+
+        {
+            "vaddr": "0x555773632000",
+            "nr_pages": 22,
+            "flags": "PE_LAZY | PE_PRESENT"
+        },
+
+                {
+                    "start": "0x7feda3ed3000",
+                    "end": "0x7feda3ed6000",
+                    "pgoff": 0,
+                    "shmid": 0,
+                    "prot": "PROT_READ | PROT_WRITE",
+                    "flags": "MAP_PRIVATE | MAP_ANON",
+                    "status": "VMA_AREA_REGULAR | VMA_ANON_PRIVATE",
+                    "fd": -1
+                },
+
+        {
+            "vaddr": "0x7feda3ed3000",
+            "nr_pages": 2,
+            "flags": "PE_LAZY | PE_PRESENT"
+        },
+
+                {
+                    "start": "0x7feda40eb000",
+                    "end": "0x7feda40ef000",
+                    "pgoff": 2179072,
+                    "shmid": 2,
+                    "prot": "PROT_READ",
+                    "flags": "MAP_PRIVATE",
+                    "status": "VMA_AREA_REGULAR | VMA_FILE_PRIVATE",
+                    "fd": -1,
+                    "fdflags": "0x0"
+                },
+
+                {
+                    "start": "0x7feda40ef000",
+                    "end": "0x7feda40f1000",
+                    "pgoff": 2195456,
+                    "shmid": 2,
+                    "prot": "PROT_READ | PROT_WRITE",
+                    "flags": "MAP_PRIVATE",
+                    "status": "VMA_AREA_REGULAR | VMA_FILE_PRIVATE",
+                    "fd": -1,
+                    "fdflags": "0x0"
+                },
+
+        {
+            "vaddr": "0x7feda40eb000",
+            "nr_pages": 6,
+            "flags": "PE_PRESENT"
+        },
+
+                {
+                    "start": "0x7feda40f1000",
+                    "end": "0x7feda40fe000",
+                    "pgoff": 0,
+                    "shmid": 0,
+                    "prot": "PROT_READ | PROT_WRITE",
+                    "flags": "MAP_PRIVATE | MAP_ANON",
+                    "status": "VMA_AREA_REGULAR | VMA_ANON_PRIVATE",
+                    "fd": -1
+                },
+
+        {
+            "vaddr": "0x7feda40f1000",
+            "nr_pages": 1,
+            "flags": "PE_LAZY | PE_PRESENT"
+        },
+
+        {
+            "vaddr": "0x7feda40f5000",
+            "nr_pages": 3,
+            "flags": "PE_LAZY | PE_PRESENT"
+        },
+
+        {
+            "vaddr": "0x7feda40fd000",
+            "nr_pages": 1,
+            "flags": "PE_LAZY | PE_PRESENT"
+        },
+
+                {
+                    "start": "0x7feda4117000",
+                    "end": "0x7feda4119000",
+                    "pgoff": 0,
+                    "shmid": 0,
+                    "prot": "PROT_READ | PROT_WRITE",
+                    "flags": "MAP_PRIVATE | MAP_ANON",
+                    "status": "VMA_AREA_REGULAR | VMA_ANON_PRIVATE",
+                    "fd": -1
+                },
+
+        {
+            "vaddr": "0x7feda4117000",
+            "nr_pages": 1,
+            "flags": "PE_LAZY | PE_PRESENT"
+        },
+
+                {
+                    "start": "0x7feda4151000",
+                    "end": "0x7feda4153000",
+                    "pgoff": 225280,
+                    "shmid": 3,
+                    "prot": "PROT_READ",
+                    "flags": "MAP_PRIVATE",
+                    "status": "VMA_AREA_REGULAR | VMA_FILE_PRIVATE",
+                    "fd": -1,
+                    "fdflags": "0x0"
+                },
+
+                {
+                    "start": "0x7feda4153000",
+                    "end": "0x7feda4155000",
+                    "pgoff": 233472,
+                    "shmid": 3,
+                    "prot": "PROT_READ | PROT_WRITE",
+                    "flags": "MAP_PRIVATE",
+                    "status": "VMA_AREA_REGULAR | VMA_FILE_PRIVATE",
+                    "fd": -1,
+                    "fdflags": "0x0"
+                },
+
+        {
+            "vaddr": "0x7feda4151000",
+            "nr_pages": 4,
+            "flags": "PE_PRESENT"
+        },
+
+                {
+                    "start": "0x7fff80b52000",
+                    "end": "0x7fff80b73000",
+                    "pgoff": 0,
+                    "shmid": 0,
+                    "prot": "PROT_READ | PROT_WRITE",
+                    "flags": "MAP_PRIVATE | MAP_ANON | MAP_GROWSDOWN",
+                    "status": "VMA_AREA_REGULAR | VMA_ANON_PRIVATE",
+                    "fd": -1
+                },
+
+        {
+            "vaddr": "0x7fff80b6f000",
+            "nr_pages": 4,
+            "flags": "PE_LAZY | PE_PRESENT"
+        },
+
+                {
+                    "start": "0x7fff80ba1000",
+                    "end": "0x7fff80ba3000",
+                    "pgoff": 0,
+                    "shmid": 0,
+                    "prot": "PROT_READ | PROT_EXEC",
+                    "flags": "MAP_PRIVATE | MAP_ANON",
+                    "status": "VMA_AREA_REGULAR | VMA_AREA_VDSO | VMA_ANON_PRIVATE",
+                    "fd": -1
+                },
+
+        {
+            "vaddr": "0x7fff80ba1000",
+            "nr_pages": 2,
+            "flags": "PE_PRESENT"
+        }

@@ -159,6 +159,7 @@ const Images  EMPTY_IMAGES  = {};
 const size_t PAGESIZE = 4096;
 
 #define PE_PRESENT (1 << 2) // copypasted from criu/include/pagemap.h
+#define VMA_AREA_VSYSCALL (1 << 2) // copypasted from criu/include/image.h
 #define VMA_AREA_HEAP (1 << 5) // copypasted from criu/include/image.h
 
 #define MAX_PATH_LEN 1024

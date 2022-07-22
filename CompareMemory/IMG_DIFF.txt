@@ -1,0 +1,120 @@
+"vmas": [
+                {
+                    "start": "0x555772de4000",
+                    "end": "0x555772de5000",
+                    "pgoff": 0,
+                    "shmid": 1,
+                    "prot": "PROT_READ",
+                    "flags": "MAP_PRIVATE",
+                    "status": "VMA_AREA_REGULAR | VMA_FILE_PRIVATE",
+                    "fd": -1,
+                    "fdflags": "0x0"
+                },
+
+                {
+                    "start": "0x555772deb000",
+                    "end": "0x555772dee000",
+                    "pgoff": 28672,
+                    "shmid": 1,
+                    "prot": "PROT_READ",
+                    "flags": "MAP_PRIVATE",
+                    "status": "VMA_AREA_REGULAR | VMA_FILE_PRIVATE",
+                    "fd": -1,
+                    "fdflags": "0x0"
+                },
+
+                {
+                    "start": "0x7feda3ed6000",
+                    "end": "0x7feda3efe000",
+                    "pgoff": 0,
+                    "shmid": 2,
+                    "prot": "PROT_READ",
+                    "flags": "MAP_PRIVATE",
+                    "status": "VMA_AREA_REGULAR | VMA_FILE_PRIVATE",
+                    "fd": -1,
+                    "fdflags": "0x0"
+                },
+
+                {
+                    "start": "0x7feda3efe000",
+                    "end": "0x7feda4093000",
+                    "pgoff": 163840,
+                    "shmid": 2,
+                    "prot": "PROT_READ | PROT_EXEC",
+                    "flags": "MAP_PRIVATE",
+                    "status": "VMA_AREA_REGULAR | VMA_FILE_PRIVATE",
+                    "fd": -1,
+                    "fdflags": "0x0"
+                },
+
+                {
+                    "start": "0x7feda4093000",
+                    "end": "0x7feda40eb000",
+                    "pgoff": 1822720,
+                    "shmid": 2,
+                    "prot": "PROT_READ",
+                    "flags": "MAP_PRIVATE",
+                    "status": "VMA_AREA_REGULAR | VMA_FILE_PRIVATE",
+                    "fd": -1,
+                    "fdflags": "0x0"
+                },
+
+                {
+                    "start": "0x7feda4119000",
+                    "end": "0x7feda411b000",
+                    "pgoff": 0,
+                    "shmid": 3,
+                    "prot": "PROT_READ",
+                    "flags": "MAP_PRIVATE",
+                    "status": "VMA_AREA_REGULAR | VMA_FILE_PRIVATE",
+                    "fd": -1,
+                    "fdflags": "0x0"
+                },
+
+                {
+                    "start": "0x7feda411b000",
+                    "end": "0x7feda4145000",
+                    "pgoff": 8192,
+                    "shmid": 3,
+                    "prot": "PROT_READ | PROT_EXEC",
+                    "flags": "MAP_PRIVATE",
+                    "status": "VMA_AREA_REGULAR | VMA_FILE_PRIVATE",
+                    "fd": -1,
+                    "fdflags": "0x0"
+                },
+
+                {
+                    "start": "0x7feda4145000",
+                    "end": "0x7feda4150000",
+                    "pgoff": 180224,
+                    "shmid": 3,
+                    "prot": "PROT_READ",
+                    "flags": "MAP_PRIVATE",
+                    "status": "VMA_AREA_REGULAR | VMA_FILE_PRIVATE",
+                    "fd": -1,
+                    "fdflags": "0x0"
+                },
+
+                {
+                    "start": "0x7fff80b9d000",
+                    "end": "0x7fff80ba1000",
+                    "pgoff": 0,
+                    "shmid": 0,
+                    "prot": "PROT_READ",
+                    "flags": "MAP_PRIVATE | MAP_ANON",
+                    "status": "VMA_AREA_REGULAR | VMA_ANON_PRIVATE | VMA_AREA_VVAR",
+                    "fd": -1,
+                    "madv": "0x10000"
+                },
+
+                {
+                    "start": "0xffffffffff600000",
+                    "end": "0xffffffffff601000",
+                    "pgoff": 0,
+                    "shmid": 0,
+                    "prot": "PROT_EXEC",
+                    "flags": "MAP_PRIVATE | MAP_ANON",
+                    "status": "VMA_AREA_VSYSCALL | VMA_ANON_PRIVATE",
+                    "fd": -1
+                }
+            ],

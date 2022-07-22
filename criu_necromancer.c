@@ -482,7 +482,7 @@ size_t GoPrpsinfo (Elf_Nhdr* nhdr, Images* imgs)
     #define TASK_DEAD  0x2
     #define TASK_STOPPED 0x3
 
-    switch (prpsinfo->pr_state)
+    /* switch (prpsinfo->pr_state)
     {
         case 0:
             imgs->core->tc->task_state = TASK_ALIVE;
@@ -498,13 +498,13 @@ size_t GoPrpsinfo (Elf_Nhdr* nhdr, Images* imgs)
                              (uint32_t) (prpsinfo->pr_state));
             break;
     }
-
+ */
     imgs->core->thread_core->sched_prio = prpsinfo->pr_nice; // sched_prio not in thread_core?
     imgs->core->tc->flags = prpsinfo->pr_flag;
     imgs->core->thread_core->creds->uid = prpsinfo->pr_uid;
     imgs->core->thread_core->creds->gid = prpsinfo->pr_gid;
     imgs->pstree->pid  = prpsinfo->pr_pid;
-    imgs->pstree->ppid = prpsinfo->pr_ppid;
+    imgs->pstree->ppid = 0; // error if prpsinfo->pr_ppid, criu in dumping writes 0 here.
     imgs->pstree->pgid = prpsinfo->pr_pgrp;
     imgs->pstree->sid  = prpsinfo->pr_sid;
 
@@ -625,6 +625,7 @@ size_t GoX86_State (Elf_Nhdr* nhdr, Images* imgs)
 size_t GoSiginfo (Elf_Nhdr* nhdr, Images* imgs)
 {
     NHDR_START (NT_SIGINFO, siginfo, 0);
+    NHDR_RETURN;
     static size_t new_pos = 0;
     SignalQueueEntry* signals_s = imgs->core->tc->signals_s;
 
@@ -744,10 +745,10 @@ int GoLoadPhdr (Elf* elf, Elf_Phdr* phdr, Images* imgs, size_t vma_counter)
     assert (phdr);
     assert (imgs);
 
-#define check_correct(cond, str) if ((cond))                \
-                                 {                          \
-                                     fprintf (stderr, str); \
-                                     return -1;             \
+#define check_correct(cond, ...) if ((cond))                        \
+                                 {                                  \
+                                     fprintf (stderr, __VA_ARGS__); \
+                                     return -1;                     \
                                  }
 
 
@@ -757,13 +758,18 @@ int GoLoadPhdr (Elf* elf, Elf_Phdr* phdr, Images* imgs, size_t vma_counter)
                                                    "It means, that coredump isn't full and generated images is incorrect.\n")
 
     VmaEntry* vma = imgs->mm->vmas[vma_counter];
-    check_correct (phdr->p_filesz != vma->end - vma->start, "Error: vma and following phdr have different sizes.\n")
+    check_correct (phdr->p_filesz != vma->end - vma->start, "Error: vma and following phdr have different sizes. vma_counter = %zu\n", vma_counter)
 
     MmChangeIfNeeded (imgs->mm, vma, phdr);
 
     vma->start = phdr->p_vaddr;
     vma->end   = phdr->p_vaddr + phdr->p_filesz;
     // pgoff, shmid, prot, flags, status, flags, fd, fdflags --- I hope it's equal
+
+    // ToDo: criu writes: "Trying to restore page for non-private VMA", but this vma has flags: VMA_AREA_VSYSCALL | VMA_ANON_PRIVATE
+    // Maybe check !(vma->flags && VMA_AREA_REGULAR) ???
+    if (vma->status & VMA_AREA_VSYSCALL)
+        return 0;
 
     PagemapEntry pagemap = PAGEMAP_ENTRY__INIT;
     pagemap.vaddr = phdr->p_vaddr;

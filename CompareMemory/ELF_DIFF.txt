@@ -1,0 +1,37 @@
+    15 files:
+      55968acfd000-55968acfe000 00000000 4096        /home/andrey/Projects/GachiLang/Backend.out
+      || 55968acfe000-55968ad04000 00001000 24576       /home/andrey/Projects/GachiLang/Backend.out
+      || 55968ad04000-55968ad07000 00007000 12288       /home/andrey/Projects/GachiLang/Backend.out
+      55968ad07000-55968ad08000 00009000 4096        /home/andrey/Projects/GachiLang/Backend.out
+      55968ad08000-55968ad09000 0000a000 4096        /home/andrey/Projects/GachiLang/Backend.out
+      7fdc53047000-7fdc5306f000 00000000 163840      /usr/lib/x86_64-linux-gnu/libc.so.6
+      || 7fdc5306f000-7fdc53204000 00028000 1658880     /usr/lib/x86_64-linux-gnu/libc.so.6
+      || 7fdc53204000-7fdc5325c000 001bd000 360448      /usr/lib/x86_64-linux-gnu/libc.so.6
+      7fdc5325c000-7fdc53260000 00214000 16384       /usr/lib/x86_64-linux-gnu/libc.so.6
+      7fdc53260000-7fdc53262000 00218000 8192        /usr/lib/x86_64-linux-gnu/libc.so.6
+      7fdc5328a000-7fdc5328c000 00000000 8192        /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2
+      || 7fdc5328c000-7fdc532b6000 00002000 172032      /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2
+      || 7fdc532b6000-7fdc532c1000 0002c000 45056       /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2
+      7fdc532c2000-7fdc532c4000 00037000 8192        /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2
+      7fdc532c4000-7fdc532c6000 00039000 8192        /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2
+
+
+Program Headers:
+  Type           Offset   VirtAddr           PhysAddr           FileSiz  MemSiz   Flg Align
+  NOTE           0x08e3f8 0x0000000000000000 0x0000000000000000 0x002c88 0x000000 R   0x1
+  LOAD           0x0003f8 0x000055968acfd000 0x0000000000000000 0x001000 0x001000 R   0x1
+  LOAD           0x0013f8 0x000055968ad07000 0x0000000000000000 0x001000 0x001000 R   0x1
+  LOAD           0x0023f8 0x000055968ad08000 0x0000000000000000 0x001000 0x001000 RW  0x1
+  || heap || LOAD           0x0033f8 0x000055968b688000 0x0000000000000000 0x021000 0x021000 RW  0x1
+  || LOAD           0x0243f8 0x00007fdc53044000 0x0000000000000000 0x003000 0x003000 RW  0x1
+  LOAD           0x0273f8 0x00007fdc53047000 0x0000000000000000 0x028000 0x028000 R   0x1
+  LOAD           0x04f3f8 0x00007fdc5325c000 0x0000000000000000 0x004000 0x004000 R   0x1
+  LOAD           0x0533f8 0x00007fdc53260000 0x0000000000000000 0x002000 0x002000 RW  0x1
+  || LOAD           0x0553f8 0x00007fdc53262000 0x0000000000000000 0x00d000 0x00d000 RW  0x1
+  || LOAD           0x0623f8 0x00007fdc53288000 0x0000000000000000 0x002000 0x002000 RW  0x1
+  LOAD           0x0643f8 0x00007fdc5328a000 0x0000000000000000 0x002000 0x002000 R   0x1
+  LOAD           0x0663f8 0x00007fdc532c2000 0x0000000000000000 0x002000 0x002000 R   0x1
+  LOAD           0x0683f8 0x00007fdc532c4000 0x0000000000000000 0x002000 0x002000 RW  0x1
+  || stack || LOAD           0x06a3f8 0x00007ffc507de000 0x0000000000000000 0x021000 0x021000 RW  0x1
+  || LOAD           0x08b3f8 0x00007ffc508e3000 0x0000000000000000 0x002000 0x002000 R E 0x1
+  LOAD           0x08d3f8 0xffffffffff600000 0x0000000000000000 0x001000 0x001000 R E 0x1
