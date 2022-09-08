@@ -3,6 +3,7 @@
 Reflections
 criu-necromancer
 env_without_rseq
+norseq
 TestFolder
 
 # Created by protobuf

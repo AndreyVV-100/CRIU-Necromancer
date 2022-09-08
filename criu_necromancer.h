@@ -222,41 +222,5 @@ FILE* StartImageWriting (const char* filename, CriuMagic magic);
 int WriteMessage (MessagePacker packer, const ProtobufCMessage* unpacked_image, size_t packed_image_size, FILE* file);
 int WriteOnlyOneMessage (const char* path, const char* name, int pid, 
                          MessagePacker packer, const void* unpacked_image, size_t packed_image_size, CriuMagic magic);
-/*  
-    ToDo: 
-        -threads, many processes
-        -files
-        -arg, env, stack
 
-    Check list:
-
-    -core - core_entry in core.proto:
-            -mtype - supported only x86-64 (but isn't checked) - ?
-            -thread-info:
-                -gpregs - in GoPrstatus - OK
-                -fpregs - in GoFpregset - OK
-            -tc:
-                -Some in GoPrpsinfo - OK
-                -Some in GoSiginfo  - OK
-                -Some required fields isn't changing (exit_code, personality) - OK
-
-    -files - in zero approximation - skip. ToDo
-
-    -ids - only renaming, but no working with it.
-
-    -pstree - pstree_entry in pstree.proto:
-                -all in GoPrpsinfo - OK (but no threads)
-
-    -mm - mm_entry in mm.proto:
-            -mm_saved_auxv - working in GoAuxv - OK
-            -vmas - OK, but I hope thas phdrs <==> vmas (and pages too)
-            -mm_arg, mm_env, mm_stack - Now is calculated by simple way. In other situations very hard, ToDo
-            -mm_brk, mm_code, mm_data - simple writing it
-
-    -pagemap - OK, but I hope thas phdrs <==> pages (and vmas too)
-
-    -timens - responsible for time, skipping
-
-    -tty-info - no working with it in coredump.py, skipping (see https://github.com/checkpoint-restore/criu/blob/criu-dev/coredump/criu_coredump/coredump.py)
-
-*/
+void PrintUsage (void);

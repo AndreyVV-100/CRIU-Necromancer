@@ -60,14 +60,7 @@ int ParseArguments (int argc, char** argv, ArgInfo* args) // ToDo: getopt
             case 'h':
             case '?':
             default:
-                printf (                                         "\n"
-                    "Usage:"                                     "\n"
-                    "  criu-necromancer -c PATH -p PATH -i PID"  "\n"
-                                                                 "\n"
-                    "Options:"                                   "\n"
-                    "  -c  [--coredump]   path to coredump file" "\n"
-                    "  -i  [--images  ]   path to criu images"   "\n"
-                                                                 "\n");
+                PrintUsage();
                 return -1;
         }
     }
@@ -75,11 +68,12 @@ int ParseArguments (int argc, char** argv, ArgInfo* args) // ToDo: getopt
     #define check_pointer(field, str)   if (args->field == NULL)                               \
                                         {                                                      \
                                             fprintf (stderr, "Error: no " str " in input.\n"); \
+                                            PrintUsage();                                      \
                                             *args = EMPTY_ARGINFO;                             \
                                             return 1;                                          \
                                         }
 
-    check_pointer (criu_dump_path, "criu dump path");
+    check_pointer (criu_dump_path, "CRIU dump path");
     check_pointer (elf, "coredump path");
     #undef check_pointer
 
@@ -955,4 +949,16 @@ int WriteOnlyOneMessage (const char* path, const char* name, int pid,
     fclose (file);
     free   (filename);
     return res;
+}
+
+void PrintUsage (void)
+{
+    printf (     "Usage:"
+            "\n" "    criu-necromancer -c <FILE> -i <PATH> [-h]"
+            "\n"
+            "\n" "Options:"
+            "\n" "    -c <FILE>, --coredump <FILE>   # path to file with ELF coredump"
+            "\n" "    -i <PATH>, --images   <PATH>   # path to directory with donor's CRIU images"
+            "\n" "    -h, --help                     # get this help" 
+            "\n");
 }

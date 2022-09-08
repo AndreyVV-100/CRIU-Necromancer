@@ -43,7 +43,7 @@ static struct sock_filter filter[N_RULES] =
     [RULE_ER] = BPF_STMT (BPF_RET, SECCOMP_RET_ERRNO | ENOSYS)
 };
 
-int seccomp_install(void) // instead of prctl() you may use seccomp()
+int seccomp_install (void) // instead of prctl() you may use seccomp()
 {
     struct sock_fprog s = { N_RULES, filter };
     prctl (PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
@@ -65,16 +65,25 @@ int main (int argc, char** argv)
         return 1;
     }
 
+    char*  exec_name = NULL;
+    char** exec_args = NULL;
+
     if (argc > 1)
     {
-        execvp (argv[1], argv + 1);
-        errorexec (argv[1]);
+        exec_name = argv[1];
+        exec_args = argv + 1;
+    }
+    else
+    {
+        exec_name = getenv ("SHELL");
+        if (!exec_name)
+            exec_name = "/bin/sh";
+
+        exec_args = calloc (2, sizeof (*exec_args));
+        exec_args[0] = exec_name;
     }
 
-    char* shell_name = getenv ("SHELL");
-    if (!shell_name)
-        shell_name = "/bin/sh";
-    char* shell_argv[] = {shell_name, NULL};
-    execvp (shell_name, shell_argv);
-    errorexec (shell_name);
+    execvp (exec_name, exec_args);
+    perror (exec_name);
+    return 1;
 }

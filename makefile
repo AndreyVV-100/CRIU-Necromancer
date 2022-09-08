@@ -62,7 +62,7 @@ Images/%.pb-c.c Images/%.pb-c.h: Images/%.proto
 mode64: $(FILES) $(OBJ_DESCRIPTOR) $(OBJS)
 	$(CC) $^ -D MODE64 $(CFLAGS) $(LDLIBS) -o criu-necromancer
 
-env_without_rseq: env_without_rseq.c
+norseq: norseq.c
 	$(CC) $^ $(CFLAGS) -o $@
 
 clean:
