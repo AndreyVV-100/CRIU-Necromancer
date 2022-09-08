@@ -2,6 +2,7 @@
 *out
 Reflections
 criu-necromancer
+env_without_rseq
 TestFolder
 
 # Created by protobuf

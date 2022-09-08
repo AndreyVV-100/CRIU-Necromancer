@@ -62,6 +62,9 @@ Images/%.pb-c.c Images/%.pb-c.h: Images/%.proto
 mode64: $(FILES) $(OBJ_DESCRIPTOR) $(OBJS)
 	$(CC) $^ -D MODE64 $(CFLAGS) $(LDLIBS) -o criu-necromancer
 
+env_without_rseq: env_without_rseq.c
+	$(CC) $^ $(CFLAGS) -o $@
+
 clean:
 	rm -f Images/*.pb-c.c
 	rm -f Images/*.pb-c.h
