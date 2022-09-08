@@ -7,6 +7,7 @@
 #include <signal.h>
 #include <compel/asm/fpu.h>
 #include <sys/mman.h>
+#include <getopt.h>
 // #include <sys/user.h> included in procfs.h
 #include "criu_necromancer.h"
 #include "fileworking.h"
@@ -38,51 +39,36 @@ int ParseArguments (int argc, char** argv, ArgInfo* args) // ToDo: getopt
     assert (argv);
     assert (args);
 
-    // Need empty struct
-    assert (args->pstree  == NULL);
-    assert (args->core    == NULL);
-    assert (args->mm      == NULL);
-    /*
-        Need 3 types of arguments
-        -c coredump path (elf file)
-        -p path to criu images
-        -i id of coredump on criu images
-    */
+    int opt_found = 0;
+    struct option longopts[] = {{"coredump", 1, NULL, 'c'},
+                                {"images",   1, NULL, 'i'},
+                                {"help",     0, NULL, 'h'},
+                                {NULL,       0, NULL,   0}};
 
-   #define check_errors(arg_str, field) if (i_arg + 1 == argc)      \
-                                        {                           \
-                                            fprintf (stderr, "Error: after \"" "-i" "\" no arguments.\n"); \
-                                            *args = EMPTY_ARGINFO;  \
-                                            return 1;               \
-                                        }                           \
-                                        if (args->field)            \
-                                        {                           \
-                                            fprintf (stderr, "Error: \"" arg_str "\" field in args was typed yet.\n"); \
-                                            *args = EMPTY_ARGINFO;  \
-                                            return 1;               \
-                                        }
-
-    for (int i_arg = 1; i_arg < argc; i_arg++)
+    while ((opt_found = getopt_long (argc, argv, "c:i:h", longopts, NULL)) != -1)
     {
-        if (strcmp (argv[i_arg], "-c") == 0)
+        switch (opt_found)
         {
-            check_errors ("-c", elf);
-            args->elf = argv[i_arg + 1];
-            i_arg++;
-        }
+            case 'c':
+                args->elf = optarg;
+                break;
+            
+            case 'i':
+                args->criu_dump_path = optarg;
+                break;
 
-        else if (strcmp (argv[i_arg], "-p") == 0)
-        {
-            check_errors ("-p", criu_dump_path);
-            args->criu_dump_path = argv[i_arg + 1];
-            i_arg++;
-        }
-        
-        else if (strcmp (argv[i_arg], "-i") == 0)
-        {
-            check_errors ("-i", criu_dump_id);
-            args->criu_dump_id = argv[i_arg + 1];
-            i_arg++;
+            case 'h':
+            case '?':
+            default:
+                printf (                                         "\n"
+                    "Usage:"                                     "\n"
+                    "  criu-necromancer -c PATH -p PATH -i PID"  "\n"
+                                                                 "\n"
+                    "Options:"                                   "\n"
+                    "  -c  [--coredump]   path to coredump file" "\n"
+                    "  -i  [--images  ]   path to criu images"   "\n"
+                                                                 "\n");
+                return -1;
         }
     }
 
@@ -94,71 +80,40 @@ int ParseArguments (int argc, char** argv, ArgInfo* args) // ToDo: getopt
                                         }
 
     check_pointer (criu_dump_path, "criu dump path");
-    check_pointer (criu_dump_id, "criu dump pid");
-    check_pointer (elf, "elf path");
-
+    check_pointer (elf, "coredump path");
     #undef check_pointer
-    #undef check_errors
-    return CreateImagesPath (args);
+
+    return 0;
 }
 
 // C-style overloading
 
-char* CreateOneImagePath  (const char* path, const char* name)
+char* CreateImagePath  (const char* path, const char* name)
 {
     char buffer[MAX_PATH_LEN] = "";
-    sprintf (buffer, "%s/%s.img", path, name);
-    return strdup (buffer);
+    snprintf (buffer, MAX_PATH_LEN - 1, "%s/%s.img", path, name);
+    char* ret = strndup (buffer, MAX_PATH_LEN);
+
+    if (!ret)
+        fprintf (stderr, "Error: Can't allocate memory.\n");
+    return ret;
 }
 
-char* CreateOneImagePathWithStrPid (const char* path, const char* name, const char* pid)
+char* CreateImagePathWithPid (const char* path, const char* name, int pid)
 {
     char buffer[MAX_PATH_LEN] = "";
-    sprintf (buffer, "%s/%s-%s.img", path, name, pid);
-    return strdup (buffer);
-}
-
-char* CreateOneImagePathWithIntPid (const char* path, const char* name, int pid)
-{
-    char buffer[MAX_PATH_LEN] = "";
-    sprintf (buffer, "%s/%s-%d.img", path, name, pid);
-    return strdup (buffer);
-}
-
-int CreateImagesPath (ArgInfo* args)
-{
-    assert (args);
-    assert (args->criu_dump_path);
-    assert (args->criu_dump_id);
-
-    #define check_pointer(field)    if (args->field == NULL)                                 \
-                                    {                                                        \
-                                        fprintf (stderr, "Error: Can't allocate memory.\n"); \
-                                        ArgInfoFree (args);                                  \
-                                        return 1;                                            \
-                                    }
-
-    args->pstree  = CreateOneImagePath           (args->criu_dump_path, "pstree");
-    args->core    = CreateOneImagePathWithStrPid (args->criu_dump_path, "core",    args->criu_dump_id);
-    args->mm      = CreateOneImagePathWithStrPid (args->criu_dump_path, "mm",      args->criu_dump_id);
-    args->pagemap = CreateOneImagePathWithStrPid (args->criu_dump_path, "pagemap", args->criu_dump_id);
-
-    check_pointer (pstree)
-    check_pointer (core)
-    check_pointer (mm)
-    check_pointer (pagemap)
+    snprintf (buffer, MAX_PATH_LEN, "%s/%s-%d.img", path, name, pid);
+    char* ret = strndup (buffer, MAX_PATH_LEN);
     
-    #undef check_pointer
-    return 0;
+    if (!ret)
+        fprintf (stderr, "Error: Can't allocate memory.\n");
+    return ret;
 }
 
 void ArgInfoFree (ArgInfo* args)
 {
+    // ToDo: Now is simple. Maybe delete it?
     assert (args);
-    free (args->pstree);                        
-    free (args->core);
-    free (args->mm);
-    free (args->pagemap);
 
     *args = EMPTY_ARGINFO;
     return;
@@ -167,9 +122,6 @@ void ArgInfoFree (ArgInfo* args)
 Images* ImagesConstructor (ArgInfo* args)
 {
     assert (args);
-    assert (args->pstree);
-    assert (args->core);
-    assert (args->mm);
 
     Images* imgs = (Images*) calloc (1, sizeof (*imgs)); 
     if (imgs == NULL)                                   
@@ -182,17 +134,24 @@ Images* ImagesConstructor (ArgInfo* args)
     #define check_retval(retval) if ((retval))                                             \
                                     {                                                      \
                                         fprintf (stderr, "Error: Can't create images.\n"); \
-                                        ArgInfoFree (args);                                \
                                         ImagesDestructor (imgs);                           \
                                         return NULL;                                       \
-                                    } 
+                                    }
 
-    check_retval (ReadOnlyOneMessage (args->pstree, (MessageUnpacker*) pstree_entry__unpack, (ProtobufCMessage**) &(imgs->pstree), MY_PSTREE_MAGIC) == -1);
-    check_retval (ReadOnlyOneMessage (args->core,   (MessageUnpacker*) core_entry__unpack,   (ProtobufCMessage**) &(imgs->core),   MY_CORE_MAGIC)   == -1);
-    check_retval (ReadOnlyOneMessage (args->mm,     (MessageUnpacker*) mm_entry__unpack,     (ProtobufCMessage**) &(imgs->mm),     MY_MM_MAGIC)     == -1);
+    check_retval (ReadOnlyOneMessage (args->criu_dump_path, "pstree", 0,
+                      (MessageUnpacker*) pstree_entry__unpack, (ProtobufCMessage**) &(imgs->pstree), MY_PSTREE_MAGIC) == -1);
+    args->criu_dump_id = imgs->pstree->pid;
 
-    imgs->pagemap = StartImageWriting (args->pagemap, MY_PAGEMAP_MAGIC);
-    check_retval (imgs->pagemap == NULL)
+    check_retval (ReadOnlyOneMessage (args->criu_dump_path, "core", args->criu_dump_id,
+                      (MessageUnpacker*) core_entry__unpack,   (ProtobufCMessage**) &(imgs->core),   MY_CORE_MAGIC)   == -1);
+    check_retval (ReadOnlyOneMessage (args->criu_dump_path, "mm",   args->criu_dump_id, 
+                      (MessageUnpacker*) mm_entry__unpack,     (ProtobufCMessage**) &(imgs->mm),     MY_MM_MAGIC)     == -1);
+    
+    // Start pagemap:
+    char* pagemap_filename = CreateImagePathWithPid (args->criu_dump_path, "pagemap", args->criu_dump_id);
+    check_retval (pagemap_filename == NULL)
+    check_retval ((imgs->pagemap = StartImageWriting (pagemap_filename, MY_PAGEMAP_MAGIC)) == NULL)
+    free (pagemap_filename);
     
     // In my situation criu always creates pagemap-pid.img and pages-1.img. I don't know, how could it be otherwise.
     PagemapHead head = PAGEMAP_HEAD__INIT;
@@ -206,11 +165,15 @@ Images* ImagesConstructor (ArgInfo* args)
     return imgs;
 }
 
-// In this program pid's are keeping with this strange types. Sorry for strange args.
-void ChangeImagePid (const char* path, const char* name, const char* old_pid, int new_pid)
+void ChangeImagePid (const char* path, const char* name, int old_pid, int new_pid)
 {
-    char* old_name = CreateOneImagePathWithStrPid (path, name, old_pid);
-    char* new_name = CreateOneImagePathWithIntPid (path, name, new_pid);
+    assert (path);
+    assert (name);
+    assert (old_pid);
+    assert (new_pid);
+
+    char* old_name = CreateImagePathWithPid (path, name, old_pid);
+    char* new_name = CreateImagePathWithPid (path, name, new_pid);
     rename (old_name, new_name);
     free (old_name);
     free (new_name);
@@ -220,31 +183,27 @@ void ChangeImagePid (const char* path, const char* name, const char* old_pid, in
 void ImagesWrite (Images* imgs, ArgInfo* args)
 {
     assert (imgs);
-    assert (args->pstree);
-    assert (args->core);
-    assert (args->mm);
+    assert (args);
+    assert (args->criu_dump_path);
+    assert (args->criu_dump_id);
     assert (imgs->pstree);
     assert (imgs->core);
     assert (imgs->mm);
 
-    char* filename = CreateOneImagePath (args->criu_dump_path, "pstree");
-    WriteOnlyOneMessage (filename, (MessagePacker*) pstree_entry__pack, imgs->pstree, 
+    WriteOnlyOneMessage (args->criu_dump_path, "pstree",               0, (MessagePacker*) pstree_entry__pack, imgs->pstree, 
                          pstree_entry__get_packed_size (imgs->pstree), MY_PSTREE_MAGIC);
-    free (filename);
 
-    filename = CreateOneImagePathWithIntPid (args->criu_dump_path, "core", imgs->pstree->pid);
-    WriteOnlyOneMessage (filename, (MessagePacker*) core_entry__pack, imgs->core,
-                         core_entry__get_packed_size (imgs->core), MY_CORE_MAGIC);
-    free (filename);
+    WriteOnlyOneMessage (args->criu_dump_path, "core", imgs->pstree->pid, (MessagePacker*) core_entry__pack,   imgs->core,
+                         core_entry__get_packed_size   (imgs->core),   MY_CORE_MAGIC);
 
-    filename = CreateOneImagePathWithIntPid (args->criu_dump_path, "mm", imgs->pstree->pid);
-    WriteOnlyOneMessage (filename, (MessagePacker*) mm_entry__pack, imgs->mm, 
-                         mm_entry__get_packed_size (imgs->mm), MY_MM_MAGIC);
-    free (filename);
+    WriteOnlyOneMessage (args->criu_dump_path, "mm",   imgs->pstree->pid, (MessagePacker*) mm_entry__pack,     imgs->mm, 
+                         mm_entry__get_packed_size     (imgs->mm),     MY_MM_MAGIC);
 
     // In my images I found 2 files, that need to be renamed: fs and ids.
     // core, mm and pagemap are renamed yet.
     // ToDo: find all files in documentation.
+    fclose (imgs->pagemap);
+    imgs->pagemap = NULL; // ToDo: OK???
 
     ChangeImagePid (args->criu_dump_path, "fs",      args->criu_dump_id, imgs->pstree->pid);
     ChangeImagePid (args->criu_dump_path, "ids",     args->criu_dump_id, imgs->pstree->pid);
@@ -261,8 +220,9 @@ void ImagesDestructor (Images* imgs)
     pstree_entry__free_unpacked  (imgs->pstree,  NULL);
     core_entry__free_unpacked    (imgs->core,    NULL);
     mm_entry__free_unpacked      (imgs->mm,      NULL);
-    fclose (imgs->pagemap);
-    fclose (imgs->pages);
+
+    if (imgs->pagemap) fclose (imgs->pagemap);
+    if (imgs->pages)   fclose (imgs->pages);
 
     *imgs = EMPTY_IMAGES;
     free (imgs);
@@ -468,7 +428,7 @@ void GoNhdrs (void* nhdrs, Elf_Xword p_filesz, Images* imgs)
                                  "Expected: sizeof (" #name ") = %lu\n"                                        \
                                  "Detected: %u\n", __func__, sizeof (name##_t), nhdr->n_descsz);               \
                                                                                                                \
-            size_t offset = sizeof (*nhdr) + GetAlignedSimple (nhdr->n_namesz);                                  \
+            size_t offset = sizeof (*nhdr) + GetAlignedSimple (nhdr->n_namesz);                                \
             name##_t* name = (name##_t*) (((void*) nhdr) + offset)
 
 // align of desc = 4
@@ -901,11 +861,17 @@ int ReadMessage (MessageUnpacker unpacker, ProtobufCMessage** unpacked_image, FI
     return *unpacked_image ? 0 : -1;
 }
 
-int ReadOnlyOneMessage (const char* filename, MessageUnpacker unpacker, ProtobufCMessage** unpacked_image, CriuMagic expected_magic)
+int ReadOnlyOneMessage (const char* path, const char* name, int pid, 
+                        MessageUnpacker unpacker, ProtobufCMessage** unpacked_image, CriuMagic expected_magic)
 {
-    assert (filename);
+    assert (path);
+    assert (name);
     assert (unpacker);
     assert (unpacked_image);
+
+    char* filename = (pid) ? CreateImagePathWithPid (path, name, pid) : CreateImagePath (path, name);
+    if (!filename)
+        return -1;
 
     FILE* file = StartImageReading (filename, expected_magic);
     int res = 0;
@@ -916,6 +882,7 @@ int ReadOnlyOneMessage (const char* filename, MessageUnpacker unpacker, Protobuf
         res = ReadMessage (unpacker, unpacked_image, file);
 
     fclose (file);
+    free   (filename);
     return res;
 }
 
@@ -965,11 +932,17 @@ int WriteMessage (MessagePacker packer, const ProtobufCMessage* unpacked_image, 
     return err == packed_image_size + sizeof (uint32_t) ? 0 : -1;
 }
 
-int WriteOnlyOneMessage (const char* filename, MessagePacker packer, const void* unpacked_image, size_t packed_image_size, CriuMagic magic)
+int WriteOnlyOneMessage (const char* path, const char* name, int pid, 
+                         MessagePacker packer, const void* unpacked_image, size_t packed_image_size, CriuMagic magic)
 {
-    assert (filename);
+    assert (path);
+    assert (name);
     assert (packer);
     assert (unpacked_image);
+
+    char* filename = (pid) ? CreateImagePathWithPid (path, name, pid) : CreateImagePath (path, name);
+    if (!filename)
+        return -1;
 
     FILE* file = StartImageWriting (filename, magic);
     int res = 0;
@@ -980,5 +953,6 @@ int WriteOnlyOneMessage (const char* filename, MessagePacker packer, const void*
         res = WriteMessage (packer, unpacked_image, packed_image_size, file);
 
     fclose (file);
+    free   (filename);
     return res;
 }

@@ -73,13 +73,9 @@ typedef struct
     // Placed on argv
     const char* elf;
     const char* criu_dump_path;
-    const char* criu_dump_id;
 
-    // Created by calloc
-    char* pstree;
-    char* core;
-    char* mm;
-    char* pagemap;
+    // Given from pstree
+    int criu_dump_id;
 } ArgInfo;
 
 typedef struct
@@ -167,18 +163,15 @@ const size_t PAGESIZE = 4096;
 int ParseArguments (int argc, char** argv, ArgInfo* args);
 
 // C-style overloading. Maybe write it the other way?
-char* CreateOneImagePath           (const char* path, const char* name);
-char* CreateOneImagePathWithStrPid (const char* path, const char* name, const char* pid);
-char* CreateOneImagePathWithIntPid (const char* path, const char* name, int pid);
-int CreateImagesPath (ArgInfo* args);
+char* CreateImagePath           (const char* path, const char* name);
+char* CreateImagePathWithPid (const char* path, const char* name, int pid);
 
 void ArgInfoFree (ArgInfo* args);
 
 Images* ImagesConstructor (ArgInfo* args);
 void ImagesDestructor (Images* imgs);
 
-// In this program pid's are keeping with this strange types. Sorry for strange args.
-void ChangeImagePid (const char* path, const char* name, const char* old_pid, int new_pid);
+void ChangeImagePid (const char* path, const char* name, int old_pid, int new_pid);
 void ImagesWrite (Images* imgs, ArgInfo* args);
 
 Elf* ElfConstructor (const char* filename);
@@ -222,13 +215,18 @@ uint32_t GetVmaProtByPhdr (Elf_Word phdr_flags);
 // allocator for unpacker = default
 FILE* StartImageReading (const char* filename, CriuMagic expected_magic);
 int ReadMessage (MessageUnpacker unpacker, ProtobufCMessage** unpacked_image, FILE* file);
-int ReadOnlyOneMessage (const char* filename, MessageUnpacker unpacker, ProtobufCMessage** unpacked_image, CriuMagic expected_magic);
+int ReadOnlyOneMessage (const char* path, const char* name, int pid, 
+                                 MessageUnpacker unpacker, ProtobufCMessage** unpacked_image, CriuMagic expected_magic);
 
 FILE* StartImageWriting (const char* filename, CriuMagic magic);
 int WriteMessage (MessagePacker packer, const ProtobufCMessage* unpacked_image, size_t packed_image_size, FILE* file);
-int WriteOnlyOneMessage (const char* filename, MessagePacker packer, const void* unpacked_image, size_t packed_image_size, CriuMagic magic);
+int WriteOnlyOneMessage (const char* path, const char* name, int pid, 
+                         MessagePacker packer, const void* unpacked_image, size_t packed_image_size, CriuMagic magic);
 /*  
-    ToDo: threads, many processes.
+    ToDo: 
+        -threads, many processes
+        -files
+        -arg, env, stack
 
     Check list:
 
